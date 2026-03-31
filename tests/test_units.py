@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import sys
 import types
@@ -11,13 +12,35 @@ import pytest
 
 from meerqat import validate_dataset
 from meerqat.cli import build_parser, main
-from meerqat.config import LLMConfig, load_config
+from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
 from meerqat.ingestion import ingest_dataset
-from meerqat.llm import _parse_hints, generate_advisory_hints, get_cached_model_path
-from meerqat.models import AdvisoryHint, BatchValidationReport, ValidationReport
+from meerqat.llm import (
+    _parse_hints,
+    _resolve_instructor_model_name,
+    _review_payload,
+    _runtime_environment,
+    generate_advisory_hints,
+    generate_llm_review,
+    get_cached_model_path,
+)
+from meerqat.models import (
+    AdvisoryHint,
+    BatchValidationReport,
+    LLMFinding,
+    ValidationReport,
+)
 from meerqat.reporting import report_to_html, report_to_markdown, write_json_report
 
 SYSTEM_ERROR_EXIT = 3
+
+
+def _report_without_llm(valid_dataset: Path, metadata_csv: Path) -> ValidationReport:
+    """Build a validation report without invoking the local model."""
+    return validate_dataset(
+        valid_dataset,
+        metadata_paths=[metadata_csv],
+        config=ValidationConfig(llm=LLMConfig(enabled=False)),
+    )
 
 
 def test_load_config_and_template_resolution(tmp_path: Path) -> None:
@@ -45,6 +68,10 @@ def test_load_config_and_template_resolution(tmp_path: Path) -> None:
     assert config.dataset_id == "run_01"
     assert config.llm.enabled is True
     assert config.llm.offline is True
+    assert config.llm.provider == "instructor"
+    assert (
+        config.llm.resolved_n_ctx() == DEFAULT_MODEL_SPECS["tinyllama"].context_window
+    )
     assert template.required_files == ("manifest.txt",)
     assert template.require_xml is False
 
@@ -58,13 +85,38 @@ def test_ingest_dataset_handles_root_plate_and_missing_metadata(
     assert dataset.dataset_id == valid_dataset.name
     assert dataset.plates[0].xml_plate_id == "Plate_A01"
     assert dataset.plates[0].image_modalities == (".tiff",)
+    assert dataset.filetree_summary.file_extensions[".tiff"] == 1
+    assert dataset.filetree_summary.file_extensions[".xml"] == 1
+
+
+def test_ingest_dataset_tracks_empty_and_similar_directories(tmp_path: Path) -> None:
+    """Dataset ingestion should summarize nViz-style filetree signals."""
+    dataset_root = tmp_path / "dataset"
+    plate = dataset_root / "Plate_A01"
+    plate.mkdir(parents=True)
+    (plate / "Index.xml").write_text('<Plate PlateID="Plate_A01"></Plate>')
+    (plate / "image_001.tiff").write_bytes(b"pixels")
+    (dataset_root / "empty_dir").mkdir()
+    (dataset_root / "segment_A").mkdir()
+    (dataset_root / "segment_B").mkdir()
+
+    dataset = ingest_dataset(dataset_root)
+
+    assert any(
+        path.endswith("empty_dir")
+        for path in dataset.filetree_summary.empty_directories
+    )
+    assert any(
+        left.endswith("segment_A") and right.endswith("segment_B")
+        for left, right in dataset.filetree_summary.similarly_named_directories
+    )
 
 
 def test_reporting_helpers_cover_batch_and_advisory(
     valid_dataset: Path, metadata_csv: Path, tmp_path: Path
 ) -> None:
     """Reporting helpers should serialize single and batch reports."""
-    report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
+    report = _report_without_llm(valid_dataset, metadata_csv)
     advisory_report = ValidationReport(
         summary=report.summary,
         issues=report.issues,
@@ -81,8 +133,10 @@ def test_reporting_helpers_cover_batch_and_advisory(
     html = report_to_html(advisory_report)
     write_json_report(batch_path, batch)
 
-    assert "Advisory Hints" in markdown
+    assert "## Filetree" in markdown
+    assert "LLM Hints" in markdown
     assert "Likely plate naming drift." in html
+    assert "File extensions" in html
     assert (
         json.loads(batch_path.read_text(encoding="utf-8"))["summary"]["dataset_count"]
         == 1
@@ -93,7 +147,7 @@ def test_llm_helpers_parse_and_skip_when_disabled(
     valid_dataset: Path, metadata_csv: Path
 ) -> None:
     """LLM helpers should parse structured JSON and no-op when disabled."""
-    report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
+    report = _report_without_llm(valid_dataset, metadata_csv)
 
     hints = _parse_hints(
         (
@@ -105,12 +159,229 @@ def test_llm_helpers_parse_and_skip_when_disabled(
     assert generate_advisory_hints(report, LLMConfig(enabled=False)) == ()
 
 
+def test_llm_review_payload_includes_filetree_summary(
+    valid_dataset: Path, metadata_csv: Path
+) -> None:
+    """The LLM payload should receive dataset-wide filetree heuristics."""
+    report = _report_without_llm(valid_dataset, metadata_csv)
+
+    payload = _review_payload(report)
+
+    assert payload["filetree_summary"]["file_extensions"][".xml"] == 1
+    assert payload["filetree_summary"]["empty_directories"] == []
+
+
+def test_llm_review_returns_disabled_status_when_disabled(
+    valid_dataset: Path, metadata_csv: Path
+) -> None:
+    """The core review result should explain when the LLM is disabled."""
+    report = _report_without_llm(valid_dataset, metadata_csv)
+
+    review = generate_llm_review(report, LLMConfig(enabled=False))
+
+    assert review.status == "disabled"
+
+
+def test_runtime_environment_builds_macos_cpu_shim(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """macOS runtime setup should create a CPU-only llama.cpp library path."""
+    fake_package_dir = tmp_path / "fake_llama_cpp"
+    fake_lib_dir = fake_package_dir / "lib"
+    fake_lib_dir.mkdir(parents=True)
+    for name in (
+        "libllama.dylib",
+        "libggml.dylib",
+        "libggml-cpu.dylib",
+        "libggml-blas.dylib",
+    ):
+        (fake_lib_dir / name).write_text("", encoding="utf-8")
+
+    def fake_find_spec(name: str) -> object:
+        assert name == "llama_cpp"
+        return types.SimpleNamespace(submodule_search_locations=[str(fake_package_dir)])
+
+    def fake_run(*args: object, **kwargs: object) -> object:
+        output_index = args[0].index("-o") + 1
+        output_path = Path(args[0][output_index])
+        output_path.write_text("", encoding="utf-8")
+        return types.SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setattr(importlib.util, "find_spec", fake_find_spec)
+    monkeypatch.setattr("subprocess.run", fake_run)
+    monkeypatch.delenv("LLAMA_CPP_LIB_PATH", raising=False)
+    monkeypatch.delenv("GGML_BACKEND_PATH", raising=False)
+
+    env = _runtime_environment(LLMConfig(cache_dir=tmp_path))
+
+    runtime_lib_dir = Path(env["LLAMA_CPP_LIB_PATH"])
+    assert env["GGML_BACKEND_PATH"] == str(runtime_lib_dir)
+    assert (runtime_lib_dir / "libggml-metal.0.dylib").exists()
+    assert (runtime_lib_dir / "libllama.dylib").exists()
+
+
 def test_llm_helpers_return_parse_error_for_bad_json() -> None:
     """Invalid JSON should produce a low-confidence parse warning."""
     hints = _parse_hints("not json")
 
     assert len(hints) == 1
     assert hints[0].title == "LLM output could not be parsed"
+
+
+def test_llm_prefers_instructor_and_falls_back_to_langchain(
+    monkeypatch: pytest.MonkeyPatch,
+    valid_dataset: Path,
+    metadata_csv: Path,
+) -> None:
+    """Instructor should be preferred, with LangChain as fallback."""
+    report = _report_without_llm(valid_dataset, metadata_csv)
+    calls: list[str] = []
+
+    def fail_instructor(report: object, config: object) -> tuple[AdvisoryHint, ...]:
+        calls.append("instructor")
+        raise ModuleNotFoundError("instructor unavailable")
+
+    def ok_langchain(report: object, config: object) -> object:
+        calls.append("langchain")
+        return types.SimpleNamespace(
+            hints=(AdvisoryHint(title="Fallback", detail="langchain"),),
+            findings=(),
+            provider="langchain",
+            model="qwen2.5-3b-instruct",
+            status="completed",
+            error=None,
+        )
+
+    monkeypatch.setattr(
+        "meerqat.llm._ensure_local_instructor_server",
+        lambda config: None,
+    )
+    monkeypatch.setattr("meerqat.llm._invoke_instructor", fail_instructor)
+    monkeypatch.setattr("meerqat.llm._invoke_langchain", ok_langchain)
+
+    review = generate_llm_review(report, LLMConfig(enabled=True))
+
+    assert calls == ["instructor", "langchain"]
+    assert review.hints[0].title == "Fallback"
+
+
+def test_llm_attempts_local_server_start_before_instructor(
+    monkeypatch: pytest.MonkeyPatch,
+    valid_dataset: Path,
+    metadata_csv: Path,
+) -> None:
+    """Instructor mode should ensure the local server before querying it."""
+    report = _report_without_llm(valid_dataset, metadata_csv)
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "meerqat.llm._ensure_local_instructor_server",
+        lambda config: calls.append("ensure"),
+    )
+    monkeypatch.setattr(
+        "meerqat.llm._invoke_instructor",
+        lambda report, config: (
+            calls.append("instructor"),
+            types.SimpleNamespace(
+                hints=(AdvisoryHint(title="Hint", detail="ready"),),
+                findings=(),
+                provider="instructor",
+                model="qwen2.5-3b-instruct",
+                status="completed",
+                error=None,
+            ),
+        )[1],
+    )
+
+    review = generate_llm_review(report, LLMConfig(enabled=True))
+
+    assert calls == ["ensure", "instructor"]
+    assert review.hints[0].detail == "ready"
+
+
+def test_llm_retries_instructor_after_connection_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    valid_dataset: Path,
+    metadata_csv: Path,
+) -> None:
+    """Instructor mode should retry after bootstrapping a local server."""
+    report = _report_without_llm(valid_dataset, metadata_csv)
+    calls: list[str] = []
+
+    monkeypatch.setattr(
+        "meerqat.llm._ensure_local_instructor_server",
+        lambda config: calls.append("ensure"),
+    )
+
+    def flaky_instructor(report: object, config: object) -> object:
+        calls.append("instructor")
+        if calls.count("instructor") == 1:
+            raise RuntimeError("Connection error.")
+        return types.SimpleNamespace(
+            hints=(AdvisoryHint(title="Hint", detail="retried"),),
+            findings=(),
+            provider="instructor",
+            model="qwen2.5-3b-instruct",
+            status="completed",
+            error=None,
+        )
+
+    monkeypatch.setattr("meerqat.llm._invoke_instructor", flaky_instructor)
+
+    review = generate_llm_review(report, LLMConfig(enabled=True))
+
+    assert calls == ["ensure", "instructor", "ensure", "instructor"]
+    assert review.hints[0].detail == "retried"
+
+
+def test_llm_returns_failed_review_when_all_paths_fail(
+    monkeypatch: pytest.MonkeyPatch,
+    valid_dataset: Path,
+    metadata_csv: Path,
+) -> None:
+    """The core review should surface a structured failure instead of crashing."""
+    report = _report_without_llm(valid_dataset, metadata_csv)
+
+    monkeypatch.setattr(
+        "meerqat.llm._ensure_local_instructor_server",
+        lambda config: (_ for _ in ()).throw(RuntimeError("startup failed")),
+    )
+    monkeypatch.setattr(
+        "meerqat.llm._invoke_instructor",
+        lambda report, config: (_ for _ in ()).throw(
+            ModuleNotFoundError("instructor missing")
+        ),
+    )
+    monkeypatch.setattr(
+        "meerqat.llm._invoke_langchain",
+        lambda report, config: (_ for _ in ()).throw(
+            ModuleNotFoundError("langchain_core missing")
+        ),
+    )
+
+    review = generate_llm_review(report, LLMConfig(enabled=True))
+
+    assert review.status == "failed"
+    assert "Run `uv sync`" in (review.error or "")
+    assert review.hints[0].title == "LLM review unavailable"
+
+
+def test_resolve_instructor_model_name_prefers_server_model_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Instructor mode should use the model id exposed by the server."""
+    monkeypatch.setattr(
+        "meerqat.llm._fetch_models_payload",
+        lambda base_url: {"data": [{"id": "Qwen2.5-3B-Instruct-Q4_K_M.gguf"}]},
+    )
+
+    model_name = _resolve_instructor_model_name(
+        "http://127.0.0.1:8000/v1", "qwen2.5-3b-instruct"
+    )
+
+    assert model_name == "Qwen2.5-3B-Instruct-Q4_K_M.gguf"
 
 
 def test_get_cached_model_path_delegates_to_huggingface(
@@ -145,12 +416,16 @@ def test_cli_parser_and_main_dispatch(
     assert callable(args.handler)
 
     report_path = tmp_path / "report.json"
+    config_path = tmp_path / "cli-config.yaml"
+    config_path.write_text("llm:\n  enabled: false\n", encoding="utf-8")
     validate_code = main(
         [
             "validate",
             str(valid_dataset),
             "--metadata",
             str(metadata_csv),
+            "--config",
+            str(config_path),
             "--report-json",
             str(report_path),
         ]
@@ -165,7 +440,9 @@ def test_cli_parser_and_main_dispatch(
         encoding="utf-8",
     )
 
-    batch_code = main(["batch-validate", str(warning_dataset)])
+    batch_code = main(
+        ["batch-validate", str(warning_dataset), "--config", str(config_path)]
+    )
     assert batch_code == 1
 
     models_code = main(["models"])
@@ -189,16 +466,25 @@ def test_validate_dataset_adds_advisory_hints(
 ) -> None:
     """The public API should attach advisory hints when enabled."""
     monkeypatch.setattr(
-        "meerqat.main.generate_advisory_hints",
-        lambda report, config: (
-            AdvisoryHint(title="Hint", detail=report.summary.status),
+        "meerqat.main.generate_llm_review",
+        lambda report, config: types.SimpleNamespace(
+            hints=(AdvisoryHint(title="Hint", detail=report.summary.status),),
+            findings=(
+                LLMFinding(
+                    category="filetree",
+                    summary="Possible hidden issue",
+                    detail="A likely hidden issue.",
+                ),
+            ),
+            provider="instructor",
+            model="qwen2.5-3b-instruct",
+            status="completed",
+            error=None,
         ),
     )
 
-    report = validate_dataset(
-        valid_dataset,
-        metadata_paths=[metadata_csv],
-        llm_config=LLMConfig(enabled=True),
-    )
+    report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
 
     assert report.advisory_hints[0].detail == "pass"
+    assert report.llm_findings[0].category == "filetree"
+    assert report.llm_review.status == "completed"

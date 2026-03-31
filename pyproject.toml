@@ -16,24 +16,26 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
 dependencies = [
-  "openpyxl>=3.1.5",
-  "pandas>=2.2.3",
-  "pydantic>=2.11.3",
-  "pyyaml>=6.0.2",
-]
-scripts.meerqat = "meerqat.cli:main"
-
-[project.optional-dependencies]
-llm = [
+  "fastapi>=0.115",
   "huggingface-hub>=0.30.2",
   "instructor>=1.7.9",
   "langchain-community>=0.3.21",
   "langchain-core>=0.3.49",
   "llama-cpp-python>=0.3.8",
-  "openai>=1.72.0",
+  "openai>=1.72",
+  "openpyxl>=3.1.5",
+  "pandas>=2.2.3",
+  "pydantic>=2.11.3",
+  "pydantic-settings>=2.8",
+  "pyyaml>=6.0.2",
+  "sse-starlette>=2.1",
+  "starlette-context>=0.3.6",
+  "uvicorn>=0.34",
 ]
+scripts.meerqat = "meerqat.cli:main"
 
 [dependency-groups]
 dev = [
@@ -90,18 +92,10 @@ lint.select = [
 # Ignore `F401` (unused imports) for `__init__.py` file
 lint.per-file-ignores."__init__.py" = [ "F401" ]
 
-[tool.pytest.ini_options]
-pythonpath = [ "." ]
-addopts = "--cov=meerqat --cov-report=term-missing"
-
-[tool.poe.tasks]
-# tasks for development environments
-test.shell = """
-pytest
-"""
-jupyter.shell = """
-jupyter lab
-"""
+[tool.pytest]
+ini_options.pythonpath = [ "." ]
+ini_options.addopts = "--cov=meerqat --cov-report=term-missing"
+ini_options.markers = [ "integration: exercises the real local llama.cpp runtime" ]
 
 [tool.jupytext]
 formats = "ipynb,py:light"
@@ -109,3 +103,12 @@ formats = "ipynb,py:light"
 [tool.vulture]
 min_confidence = 90
 paths = [ "src/meerqat", "tests" ]
+
+[tool.poe]
+# tasks for development environments
+tasks.test.shell = """
+pytest
+"""
+tasks.jupyter.shell = """
+jupyter lab
+"""

@@ -3,8 +3,19 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
+import sys
 from pathlib import Path
+
+
+def _cli_env(tmp_path: Path) -> dict[str, str]:
+    """Build a subprocess environment for direct CLI execution."""
+    env = os.environ.copy()
+    src_path = str(Path.cwd() / "src")
+    existing = env.get("PYTHONPATH")
+    env["PYTHONPATH"] = src_path if not existing else f"{src_path}:{existing}"
+    return env
 
 
 def test_cli_validate_writes_json_report(
@@ -12,21 +23,23 @@ def test_cli_validate_writes_json_report(
 ) -> None:
     """The validate command should emit reports and exit cleanly."""
     report_path = tmp_path / "cli-report.json"
+    config_path = _write_test_config(tmp_path)
     result = subprocess.run(
         [
-            "uv",
-            "run",
-            "python",
+            sys.executable,
             "-m",
             "meerqat.cli",
             "validate",
             str(valid_dataset),
             "--metadata",
             str(metadata_csv),
+            "--config",
+            str(config_path),
             "--report-json",
             str(report_path),
         ],
         capture_output=True,
+        env=_cli_env(tmp_path),
         text=True,
         check=False,
     )
@@ -40,6 +53,7 @@ def test_cli_validate_writes_json_report(
 def test_cli_batch_validate_returns_warning_exit_code(tmp_path: Path) -> None:
     """Batch validation should propagate warning exit codes."""
     dataset = tmp_path / "dataset"
+    config_path = _write_test_config(tmp_path)
     plate = dataset / "Plate_A01"
     plate.mkdir(parents=True)
     (plate / "Index.xml").write_text(
@@ -48,15 +62,16 @@ def test_cli_batch_validate_returns_warning_exit_code(tmp_path: Path) -> None:
 
     result = subprocess.run(
         [
-            "uv",
-            "run",
-            "python",
+            sys.executable,
             "-m",
             "meerqat.cli",
             "batch-validate",
             str(dataset),
+            "--config",
+            str(config_path),
         ],
         capture_output=True,
+        env=_cli_env(tmp_path),
         text=True,
         check=False,
     )
@@ -67,12 +82,21 @@ def test_cli_batch_validate_returns_warning_exit_code(tmp_path: Path) -> None:
 
 def test_cli_models_lists_presets() -> None:
     """The models command should list built-in presets."""
+    env = _cli_env(Path.cwd())
     result = subprocess.run(
-        ["uv", "run", "python", "-m", "meerqat.cli", "models"],
+        [sys.executable, "-m", "meerqat.cli", "models"],
         capture_output=True,
+        env=env,
         text=True,
         check=False,
     )
 
     assert result.returncode == 0
     assert "qwen2.5-3b-instruct" in result.stdout
+
+
+def _write_test_config(tmp_path: Path) -> Path:
+    """Write a config that disables LLM review for deterministic CLI tests."""
+    config_path = tmp_path / "test-config.yaml"
+    config_path.write_text("llm:\n  enabled: false\n", encoding="utf-8")
+    return config_path

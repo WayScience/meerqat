@@ -13,5 +13,6 @@ caption: 'Contents:'
 maxdepth: 3
 ---
 cli
+on_the_lookout_with_meerqat
 python-api
 ```

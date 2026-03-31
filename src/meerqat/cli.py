@@ -34,10 +34,9 @@ def _render_stdout(report: ValidationReport | BatchValidationReport) -> str:
 def _build_llm_config(args: argparse.Namespace, base: ValidationConfig) -> LLMConfig:
     """Build LLM config from CLI arguments."""
     existing = base.llm
-    enabled = args.advisory or existing.enabled
     model_alias = args.llm_model or existing.model_alias
     return LLMConfig(
-        enabled=enabled,
+        enabled=existing.enabled,
         provider=args.llm_provider or existing.provider,
         model_alias=model_alias,
         repo_id=args.llm_repo_id or existing.repo_id,
@@ -121,7 +120,11 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--report-markdown")
         target.add_argument("--report-html")
         target.add_argument("--fail-on-warning", action="store_true")
-        target.add_argument("--advisory", action="store_true")
+        target.add_argument(
+            "--advisory",
+            action="store_true",
+            help="Compatibility flag. LLM review now runs by default.",
+        )
         target.add_argument(
             "--llm-provider",
             choices=("langchain", "instructor"),
@@ -130,12 +133,22 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--llm-repo-id")
         target.add_argument("--llm-filename")
         target.add_argument("--llm-cache-dir")
-        target.add_argument("--llm-base-url")
+        target.add_argument(
+            "--llm-base-url",
+            help="OpenAI-compatible local endpoint. Defaults to http://127.0.0.1:8000/v1.",
+        )
         target.add_argument("--llm-n-ctx", type=int)
         target.add_argument("--llm-threads", type=int)
         target.add_argument("--llm-max-tokens", type=int)
         target.add_argument("--llm-temperature", type=float)
-        target.add_argument("--offline", action="store_true")
+        target.add_argument(
+            "--offline",
+            action="store_true",
+            help=(
+                "Require local-only model access. Defaults to disabled unless "
+                "passed or set in config."
+            ),
+        )
 
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("dataset")

@@ -9,7 +9,7 @@ from typing import Any
 
 @dataclass(frozen=True)
 class AdvisoryHint:
-    """Advisory pattern hint produced by the optional LLM layer."""
+    """Advisory pattern hint produced by the LLM layer."""
 
     title: str
     detail: str
@@ -17,6 +17,35 @@ class AdvisoryHint:
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the hint to a dictionary."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class LLMFinding:
+    """Model-derived suspected dataset issue."""
+
+    category: str
+    summary: str
+    detail: str
+    confidence: str = "medium"
+    plate_id: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the finding to a dictionary."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class LLMReview:
+    """Status and output of the model review phase."""
+
+    status: str = "not_run"
+    provider: str | None = None
+    model: str | None = None
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the review metadata to a dictionary."""
         return asdict(self)
 
 
@@ -47,6 +76,25 @@ class MetadataRecord:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the record to a dictionary."""
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class FiletreeSummary:
+    """Dataset-wide filetree inventory and heuristics."""
+
+    file_extensions: dict[str, int] = field(default_factory=dict)
+    empty_directories: tuple[str, ...] = ()
+    similarly_named_directories: tuple[tuple[str, str], ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the filetree summary to a dictionary."""
+        return {
+            "file_extensions": dict(self.file_extensions),
+            "empty_directories": list(self.empty_directories),
+            "similarly_named_directories": [
+                list(pair) for pair in self.similarly_named_directories
+            ],
+        }
 
 
 @dataclass(frozen=True)
@@ -82,6 +130,7 @@ class Dataset:
     root: Path
     plates: tuple[Plate, ...]
     metadata_records: tuple[MetadataRecord, ...] = ()
+    filetree_summary: FiletreeSummary = field(default_factory=FiletreeSummary)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the dataset to a dictionary."""
@@ -90,6 +139,7 @@ class Dataset:
             "root": str(self.root),
             "plates": [plate.to_dict() for plate in self.plates],
             "metadata_records": [record.to_dict() for record in self.metadata_records],
+            "filetree_summary": self.filetree_summary.to_dict(),
         }
 
 
@@ -117,6 +167,8 @@ class ValidationReport:
     summary: ValidationSummary
     issues: tuple[ValidationIssue, ...]
     advisory_hints: tuple[AdvisoryHint, ...] = ()
+    llm_findings: tuple[LLMFinding, ...] = ()
+    llm_review: LLMReview = field(default_factory=LLMReview)
     dataset: Dataset | None = None
     rule_results: dict[str, Any] = field(default_factory=dict)
 
@@ -126,6 +178,8 @@ class ValidationReport:
             "summary": self.summary.to_dict(),
             "issues": [issue.to_dict() for issue in self.issues],
             "advisory_hints": [hint.to_dict() for hint in self.advisory_hints],
+            "llm_findings": [finding.to_dict() for finding in self.llm_findings],
+            "llm_review": self.llm_review.to_dict(),
             "dataset": self.dataset.to_dict() if self.dataset is not None else None,
             "rule_results": self.rule_results,
         }

@@ -1,6 +1,6 @@
-# Meerqat 🐾
+# MeerQat 🐾
 
-**Meerqat** is a Python package and CLI for validating bioimaging datasets before pipeline execution. It scans filesystem structure, parses XML and tabular metadata, checks cross-source consistency, and emits reports for both humans and automation.
+**MeerQat** is a Python package and CLI for validating bioimaging datasets before pipeline execution. It scans filesystem structure, parses XML and tabular metadata, checks cross-source consistency, and emits reports for both humans and automation.
 
 > A sentinel for bioimaging data.
 
@@ -13,7 +13,16 @@
 - Partial image sets and zero-byte image files
 - Mixed image modalities within a single plate
 
-Validation is deterministic. Optional LLM output is advisory only.
+Validation is deterministic. The LLM review is built in and adds interpretive output without owning pass/fail.
+
+## Deterministic Vs LLM Review
+
+MeerQat has two separate layers:
+
+- Deterministic validation scans the dataset, parses XML and metadata, applies rules, and produces the real pass, warn, or fail outcome.
+- The built-in LLM review runs after that deterministic report exists and adds hints plus suspected hidden issues such as likely root causes, naming-pattern observations, config suggestions, and filetree/content anomalies.
+
+The LLM does not decide issue codes, severity, or exit codes.
 
 ## Features
 
@@ -22,19 +31,13 @@ Validation is deterministic. Optional LLM output is advisory only.
 - JSON, Markdown, and HTML reporting
 - Assay templates for Phenix Harmony and generic microscopy layouts
 - OME-Zarr, TIFF, OME-TIFF, PNG, and JPEG inventory support
-- Optional local LLM advisory mode using a GGUF model or a local OpenAI-compatible `llama.cpp` server
+- Built-in local LLM review with Instructor as the preferred path and LangChain as fallback
 - CI-friendly exit codes: `0` pass, `1` warning, `2` failure, `3` system error
 
 ## Install
 
 ```bash
 uv sync
-```
-
-To enable local advisory mode as well:
-
-```bash
-uv sync --extra llm
 ```
 
 ## CLI
@@ -48,6 +51,8 @@ meerqat validate /data/CHP-134 \
   --report-html report.html
 ```
 
+This command runs deterministic validation and then the built-in LLM review.
+
 Batch validation:
 
 ```bash
@@ -60,21 +65,29 @@ List built-in local model presets:
 meerqat models
 ```
 
-Enable advisory mode with the default lightweight model preset:
+Run the built-in LLM review with the default local preset:
 
 ```bash
-meerqat validate /data/CHP-134 --advisory --offline
+meerqat validate /data/CHP-134 --offline
 ```
+
+MeerQat runs the same deterministic validation first, then adds `advisory_hints`, `llm_findings`, and `llm_review` metadata to the finished report. It prefers the Instructor path, will try to start a local `llama.cpp` server at the default local endpoint when needed, and falls back to the direct LangChain `llama.cpp` path otherwise.
+
+By default, the LLM base URL is local: `http://127.0.0.1:8000/v1`. The
+`--offline` flag is opt-in and defaults to disabled unless you pass it or set
+it in config.
 
 Use an OpenAI-compatible local `llama.cpp` server with Instructor:
 
 ```bash
 meerqat validate /data/CHP-134 \
-  --advisory \
   --llm-provider instructor \
   --llm-model qwen2.5-3b-instruct \
   --llm-base-url http://127.0.0.1:8000/v1
 ```
+
+If nothing is already listening on the default local base URL, MeerQat will try
+to start a local `llama.cpp` server automatically.
 
 ## Python API
 
@@ -89,6 +102,8 @@ report = validate_dataset(
 
 print(report.summary.status)
 ```
+
+The report includes `advisory_hints`, `llm_findings`, and `llm_review`, but `report.summary.status` still comes from deterministic rules.
 
 ## Sample Datasets
 
@@ -109,7 +124,7 @@ The current scenarios cover:
 
 ## Configuration
 
-Meerqat accepts a YAML config file:
+MeerQat accepts a YAML config file:
 
 ```yaml
 dataset_id: assay_2026_03_30
@@ -119,9 +134,10 @@ expected_plate_count: 8
 metadata_plate_column: plate_id
 fail_on_warning: false
 llm:
-  enabled: false
-  provider: langchain
+  enabled: true
+  provider: instructor
   model_alias: qwen2.5-3b-instruct
+  base_url: http://127.0.0.1:8000/v1
   offline: true
 ```
 
@@ -130,11 +146,11 @@ llm:
 The current package covers the roadmap with lightweight implementations:
 
 - Phase 1: dataset scanning, XML/metadata parsing, core rules, CLI and JSON reporting
-- Phase 2: optional local LLM advisory integration, structured outputs, pattern hints, config suggestions
+- Phase 2: local LLM integration, structured outputs, pattern hints, suspected hidden issues, config suggestions
 - Phase 3: assay templates, richer Markdown/HTML reporting
 - Phase 4: OME-Zarr and TIFF inventory support plus basic image-file QC
 - Phase 5: CI-friendly behavior and batch validation support
 
 ## Local Model Choice
 
-The default advisory preset is `qwen2.5-3b-instruct`, which is a more capable lightweight default than the TinyLlama example in `local_llm_reference.py`. You can override the model alias, repository, and GGUF filename from either the Python API or the CLI.
+The default LLM preset is `qwen2.5-3b-instruct`, which is a lightweight and more capable default than the earlier TinyLlama-based prototype. You can override the model alias, repository, and GGUF filename from either the Python API or the CLI.

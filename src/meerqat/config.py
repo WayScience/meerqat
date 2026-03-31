@@ -53,6 +53,7 @@ class ModelSpec:
     alias: str
     repo_id: str
     filename: str
+    context_window: int
 
 
 DEFAULT_MODEL_SPECS: dict[str, ModelSpec] = {
@@ -60,26 +61,29 @@ DEFAULT_MODEL_SPECS: dict[str, ModelSpec] = {
         alias="tinyllama",
         repo_id="TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF",
         filename="tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf",
+        context_window=2048,
     ),
     "qwen2.5-3b-instruct": ModelSpec(
         alias="qwen2.5-3b-instruct",
         repo_id="Qwen/Qwen2.5-3B-Instruct-GGUF",
         filename="qwen2.5-3b-instruct-q4_k_m.gguf",
+        context_window=32768,
     ),
 }
 
 
 @dataclass(frozen=True)
 class LLMConfig:
-    """Optional advisory LLM configuration."""
+    """Core LLM review configuration."""
 
-    enabled: bool = False
-    provider: str = "langchain"
+    enabled: bool = True
+    provider: str = "instructor"
     model_alias: str = "qwen2.5-3b-instruct"
     repo_id: str | None = None
     filename: str | None = None
     cache_dir: Path | None = None
     offline: bool = False
+    auto_start_server: bool = True
     n_ctx: int = 4096
     n_threads: int = 8
     max_tokens: int = 512
@@ -93,8 +97,13 @@ class LLMConfig:
                 alias=self.model_alias,
                 repo_id=self.repo_id,
                 filename=self.filename,
+                context_window=self.n_ctx,
             )
         return DEFAULT_MODEL_SPECS[self.model_alias]
+
+    def resolved_n_ctx(self) -> int:
+        """Clamp the requested context window to the selected model's limit."""
+        return min(self.n_ctx, self.resolved_model().context_window)
 
 
 @dataclass(frozen=True)

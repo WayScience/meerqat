@@ -1,12 +1,16 @@
-
-# Meerqat Architecture
+# MeerQat Architecture
 
 ## Overview
 
-Meerqat combines:
+MeerQat combines:
 
 1. Deterministic validation (source of truth)
-2. LLM-assisted pattern inference (advisory)
+1. LLM-assisted pattern inference (built in)
+
+The boundary matters:
+
+- Deterministic validation owns issue detection, severity assignment, report status, and exit codes.
+- The LLM layer consumes the completed deterministic report and adds interpretation only.
 
 ## Core Components
 
@@ -24,9 +28,9 @@ Meerqat combines:
   - XML consistency checks
   - Metadata coverage checks
   - Count and image-file QC checks
-- LLM advisory engine
-  - Direct local GGUF execution via `langchain-community` + `llama.cpp`
-  - Optional Instructor mode against an OpenAI-compatible local `llama.cpp` server
+- Core LLM review engine
+  - Preferred Instructor mode against an OpenAI-compatible local `llama.cpp` server
+  - LangChain + local GGUF fallback via `langchain-community` + `llama.cpp`
 - Reporting system
   - JSON
   - Markdown

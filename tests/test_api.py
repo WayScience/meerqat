@@ -17,9 +17,18 @@ from meerqat.main import write_reports
 EXPECTED_BATCH_REPORTS = 2
 
 
+def _without_llm() -> ValidationConfig:
+    """Return a validation config that skips the runtime review."""
+    return ValidationConfig(llm=LLMConfig(enabled=False))
+
+
 def test_validate_dataset_passes(valid_dataset: Path, metadata_csv: Path) -> None:
     """A complete dataset should pass deterministic validation."""
-    report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
+    report = validate_dataset(
+        valid_dataset,
+        metadata_paths=[metadata_csv],
+        config=_without_llm(),
+    )
 
     assert report.summary.status == "pass"
     assert report.summary.plate_count == 1
@@ -38,7 +47,10 @@ def test_validate_dataset_detects_multiple_issues(
         '<Plate PlateID="Plate_X99"></Plate>', encoding="utf-8"
     )
     (plate / "image_001.tiff").write_bytes(b"")
-    config = ValidationConfig(expected_images_per_plate=2)
+    config = ValidationConfig(
+        expected_images_per_plate=2,
+        llm=LLMConfig(enabled=False),
+    )
 
     report = validate_dataset(dataset, metadata_paths=[metadata_csv], config=config)
 
@@ -51,11 +63,43 @@ def test_validate_dataset_detects_multiple_issues(
     assert "metadata.orphan_record" in codes
 
 
+def test_validate_dataset_detects_filetree_risks(tmp_path: Path) -> None:
+    """Meerqat should surface empty and similarly named directories."""
+    dataset = tmp_path / "dataset"
+    plate = dataset / "Plate_A01"
+    plate.mkdir(parents=True)
+    (plate / "Index.xml").write_text(
+        '<Plate PlateID="Plate_A01"></Plate>',
+        encoding="utf-8",
+    )
+    (plate / "image_001.tiff").write_bytes(b"pixels")
+    (dataset / "empty_dir").mkdir()
+    (dataset / "segment_A").mkdir()
+    (dataset / "segment_B").mkdir()
+
+    report = validate_dataset(
+        dataset,
+        config=ValidationConfig(llm=LLMConfig(enabled=False)),
+    )
+
+    codes = {issue.code for issue in report.issues}
+    assert "dataset.empty_directory" in codes
+    assert "dataset.similar_directories" in codes
+    assert report.rule_results["file_extensions"][".xml"] == 1
+    assert any(
+        path.endswith("empty_dir") for path in report.rule_results["empty_directories"]
+    )
+
+
 def test_write_reports_outputs_all_formats(
     valid_dataset: Path, metadata_csv: Path, tmp_path: Path
 ) -> None:
     """All report writers should emit files."""
-    report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
+    report = validate_dataset(
+        valid_dataset,
+        metadata_paths=[metadata_csv],
+        config=_without_llm(),
+    )
     json_path = tmp_path / "report.json"
     markdown_path = tmp_path / "report.md"
     html_path = tmp_path / "report.html"
@@ -86,7 +130,9 @@ def test_batch_validate_aggregates_reports(
     )
 
     batch = batch_validate(
-        [valid_dataset, second_dataset], metadata_paths=[metadata_csv]
+        [valid_dataset, second_dataset],
+        metadata_paths=[metadata_csv],
+        config=_without_llm(),
     )
 
     assert len(batch.reports) == EXPECTED_BATCH_REPORTS

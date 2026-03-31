@@ -19,7 +19,7 @@ sys.path.insert(0, basedir)
 
 # -- Project information -----------------------------------------------------
 
-project = "meerqat"
+project = "MeerQat"
 # is used here due to sphinx decision-making: https://github.com/sphinx-doc/sphinx/issues/8132
 copyright = "2024, DBMI Community"  # noqa: A001
 author = "DBMI Community"
@@ -60,7 +60,7 @@ html_theme_options = {
             "icon": "fa-brands fa-github",
         },
     ],
-    "logo": {"text": "meerqat"},
+    "logo": {"text": "MeerQat"},
     "use_edit_page_button": False,
     "show_toc_level": 1,
     "navbar_align": "left",
@@ -83,3 +83,10 @@ autodoc_preserve_defaults = True
 
 # enable anchor creation
 myst_heading_anchors = 3
+
+# Notebook shell escapes like `!python ...` trigger a known syntax-highlighting
+# warning under the Python lexer even though they are valid in IPython.
+suppress_warnings = ["misc.highlighting_failure"]
+
+# Render notebooks without requiring execution during doc builds.
+nb_execution_mode = "off"

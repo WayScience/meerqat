@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from meerqat import validate_dataset
+from meerqat import LLMConfig, ValidationConfig, validate_dataset
 
 DATA_ROOT = Path(__file__).parent / "data"
+
+
+def _without_llm() -> ValidationConfig:
+    """Return a validation config that skips the runtime review."""
+    return ValidationConfig(llm=LLMConfig(enabled=False))
 
 
 def test_valid_minimal_dataset() -> None:
@@ -14,6 +19,7 @@ def test_valid_minimal_dataset() -> None:
     report = validate_dataset(
         DATA_ROOT / "valid_minimal" / "dataset",
         metadata_paths=[DATA_ROOT / "valid_minimal" / "metadata.csv"],
+        config=_without_llm(),
     )
 
     assert report.summary.status == "pass"
@@ -25,6 +31,7 @@ def test_missing_index_dataset() -> None:
     report = validate_dataset(
         DATA_ROOT / "missing_index" / "dataset",
         metadata_paths=[DATA_ROOT / "missing_index" / "metadata.csv"],
+        config=_without_llm(),
     )
 
     assert report.summary.status == "fail"
@@ -39,6 +46,7 @@ def test_xml_mismatch_dataset() -> None:
     report = validate_dataset(
         DATA_ROOT / "xml_mismatch" / "dataset",
         metadata_paths=[DATA_ROOT / "xml_mismatch" / "metadata.csv"],
+        config=_without_llm(),
     )
 
     assert report.summary.status == "fail"
@@ -50,6 +58,7 @@ def test_missing_metadata_dataset() -> None:
     report = validate_dataset(
         DATA_ROOT / "missing_metadata" / "dataset",
         metadata_paths=[DATA_ROOT / "missing_metadata" / "metadata.csv"],
+        config=_without_llm(),
     )
 
     assert report.summary.status == "warn"
@@ -64,6 +73,7 @@ def test_mixed_modalities_dataset() -> None:
     report = validate_dataset(
         DATA_ROOT / "mixed_modalities" / "dataset",
         metadata_paths=[DATA_ROOT / "mixed_modalities" / "metadata.csv"],
+        config=_without_llm(),
     )
 
     assert report.summary.status == "warn"

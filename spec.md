@@ -1,59 +1,59 @@
-# Meerqat Specification 🐾
+# MeerQat Specification 🐾
 
 ## Overview
 
-**Meerqat** is a Python package and CLI tool designed to validate bioimaging datasets by detecting structural inconsistencies, metadata gaps, and cross-source mismatches before downstream analysis.
+**MeerQat** is a Python package and CLI tool designed to validate bioimaging datasets by detecting structural inconsistencies, metadata gaps, and cross-source mismatches before downstream analysis.
 
-Meerqat acts as a *sentinel* — identifying issues early, reducing friction between imaging and computational workflows, and improving reproducibility.
+MeerQat acts as a *sentinel* — identifying issues early, reducing friction between imaging and computational workflows, and improving reproducibility.
 
----
+______________________________________________________________________
 
 ## Problem Statement
 
 Bioimaging datasets often suffer from:
 
-- Missing required files (e.g., `Index.xml`) from the Phenix Harmony microscope  
-- Inconsistent plate naming conventions  
-- Metadata mismatches or missing entries with provided platemap files  
-- Metadata/platemap files not provided  
-- Folder-to-XML identity mismatches  
-- Partial or incomplete image sets  
+- Missing required files (e.g., `Index.xml`) from the Phenix Harmony microscope
+- Inconsistent plate naming conventions
+- Metadata mismatches or missing entries with provided platemap files
+- Metadata/platemap files not provided
+- Folder-to-XML identity mismatches
+- Partial or incomplete image sets
 - Silent failures in downstream pipelines
 
 These issues are frequently discovered late, leading to:
 
-- wasted computational time  
-- manual debugging cycles  
+- wasted computational time
+- manual debugging cycles
 - ambiguity between data producers and analysts
 
-Meerqat aims to detect these issues **early and systematically**.
+MeerQat aims to detect these issues **early and systematically**.
 
----
+______________________________________________________________________
 
 ## Goals
 
 ### Primary Goals
 
-- Validate dataset **structure, completeness, and consistency**  
-- Detect issues **before pipeline execution**  
-- Provide **clear, actionable feedback**  
+- Validate dataset **structure, completeness, and consistency**
+- Detect issues **before pipeline execution**
+- Provide **clear, actionable feedback**
 - Bridge the gap between imaging and computational teams
 
 ### Secondary Goals
 
-- Infer dataset patterns using local LLMs  
-- Suggest configuration and naming conventions  
+- Infer dataset patterns using local LLMs
+- Suggest configuration and naming conventions
 - Provide structured outputs for automation
 
----
+______________________________________________________________________
 
 ## Non-Goals (MVP)
 
-- Biological quality assessment (e.g., phenotype validity)  
-- Deep image-level QC (e.g., focus, segmentation quality)  
+- Biological quality assessment (e.g., phenotype validity)
+- Deep image-level QC (e.g., focus, segmentation quality)
 - Replacement of downstream pipelines
 
----
+______________________________________________________________________
 
 ## Core Concepts
 
@@ -65,9 +65,9 @@ A collection of plates, files, and metadata representing an imaging experiment.
 
 A logical unit containing:
 
-- image files  
-- XML metadata  
-- associated metadata entries  
+- image files
+- XML metadata
+- associated metadata entries
 - Phenix Harmony is an initial focus but we will later expand to many other microscope and image output types (so keep abstractions in mind)
 
 ### Metadata Record
@@ -86,120 +86,123 @@ A structured record of a detected problem.
 
 An LLM-derived suggestion or interpretation.
 
----
+______________________________________________________________________
 
 ## System Architecture
 
-Meerqat consists of two validation layers:
+MeerQat consists of two validation layers:
 
-### 1\. Deterministic Validation (Source of Truth)
+### 1. Deterministic Validation (Source of Truth)
 
-- Rule-based checks  
-- Fully reproducible  
+- Rule-based checks
+- Fully reproducible
 - Required for pass/fail decisions
 
-### 2\. LLM-Assisted Pattern Inference (Advisory)
+### 2. LLM-Assisted Pattern Inference (Advisory)
 
-- Uses local `llama.cpp` models  
-- Structured via Instructor  
-- Provides:  
-  - pattern inference  
-  - anomaly explanations  
+- Prefers Instructor with a local OpenAI-compatible `llama.cpp` server
+- Falls back to direct local GGUF execution when Instructor is unavailable
+- Provides:
+  - pattern inference
+  - anomaly explanations
   - config suggestions
+
+This layer does not make pass/fail decisions. It operates on the completed
+deterministic report and adds interpretation for human operators.
 
 **Principle:** Validation is deterministic. Interpretation is advisory.
 
----
+______________________________________________________________________
 
 ## Functional Requirements
 
 ### Input
 
-- Dataset directory  
-- Optional metadata file(s)  
+- Dataset directory
+- Optional metadata file(s)
 - Optional configuration file (YAML)
 
----
+______________________________________________________________________
 
 ### Dataset Ingestion
 
 The system must:
 
-- Scan filesystem structure  
-- Identify plate directories  
-- Parse XML files  
-- Load metadata tables  
+- Scan filesystem structure
+- Identify plate directories
+- Parse XML files
+- Load metadata tables
 - Count files and image sets
 
----
+______________________________________________________________________
 
 ### Normalization
 
 The system must:
 
-- Normalize identifiers (plate IDs, filenames)  
-- Map relationships between:  
-  - folders  
-  - XML contents  
+- Normalize identifiers (plate IDs, filenames)
+- Map relationships between:
+  - folders
+  - XML contents
   - metadata entries
 
----
+______________________________________________________________________
 
 ### Validation Rules
 
 #### Structure Checks
 
-- Required folders exist  
+- Required folders exist
 - Required files present (e.g., `Index.xml`)
 
 #### Naming Checks
 
-- Plate names follow expected patterns  
+- Plate names follow expected patterns
 - Nonstandard names flagged
 
 #### XML Consistency
 
-- XML is parseable  
+- XML is parseable
 - XML plate ID matches folder
 
 #### Metadata Coverage
 
-- Every plate has metadata  
+- Every plate has metadata
 - Metadata entries map to real plates
 
 #### Count Validation
 
-- Plate count matches expectation  
+- Plate count matches expectation
 - Image set counts match expected values
 
 #### Pipeline Readiness
 
-- Dataset can be safely processed  
+- Dataset can be safely processed
 - Partial execution risks are flagged
 
----
+______________________________________________________________________
 
 ### Output
 
 #### Human-readable report
 
-- Summary (pass/warn/fail)  
-- Issues grouped by severity and plate  
+- Summary (pass/warn/fail)
+- Issues grouped by severity and plate
 - Suggested remediation
-- Optional advisory hints for likely causes and config suggestions
+- LLM hints for likely causes, hidden risks, and config suggestions
 
 #### Machine-readable report (JSON)
 
-- Structured issues  
-- Dataset summary  
+- Structured issues
+- Dataset summary
 - Rule results
 - Batch validation summary
 
 #### Exit codes
 
-- `0`: pass  
-- `1`: warnings  
-- `2`: failure  
+- `0`: pass
+- `1`: warnings
+- `2`: failure
 - `3`: system error
 
 ## Implemented Scope
@@ -212,9 +215,9 @@ The package implementation in this repository currently includes:
 - Image inventory support for TIFF, OME-TIFF, OME-Zarr, PNG, and JPEG assets
 - Single-dataset and batch validation through both API and CLI
 - JSON, Markdown, and HTML outputs
-- Optional local LLM advisory mode with configurable model selection
+- Built-in local LLM review with configurable model selection
 
----
+______________________________________________________________________
 
 ## Domain Model
 
@@ -222,37 +225,43 @@ The package implementation in this repository currently includes:
 
 class Dataset:
 
-    dataset\_id: str | None
+```
+dataset\_id: str | None
 
-    plates: list\[Plate\]
+plates: list\[Plate\]
 
-    metadata\_records: list\[MetadataRecord\]
+metadata\_records: list\[MetadataRecord\]
+```
 
 ### Plate
 
 class Plate:
 
-    folder\_name: str
+```
+folder\_name: str
 
-    normalized\_plate\_id: str | None
+normalized\_plate\_id: str | None
 
-    xml\_plate\_id: str | None
+xml\_plate\_id: str | None
 
-    metadata\_plate\_id: str | None
+metadata\_plate\_id: str | None
+```
 
 ### ValidationIssue
 
 class ValidationIssue:
 
-    rule\_id: str
+```
+rule\_id: str
 
-    severity: str
+severity: str
 
-    message: str
+message: str
 
-    entity\_id: str | None
+entity\_id: str | None
+```
 
----
+______________________________________________________________________
 
 ## Configuration
 
@@ -260,33 +269,33 @@ Example YAML:
 
 dataset:
 
-  dataset\_id: CHP-134
+dataset_id: CHP-134
 
-plate\_naming:
+plate_naming:
 
-  regex: "^BR\[0-9\]+$"
+regex: "^BR[0-9]+$"
 
-required\_files:
+required_files:
 
-  \- "Images/Index.xml"
+\- "Images/Index.xml"
 
 expectations:
 
-  expected\_plate\_count: 27
+expected_plate_count: 27
 
-  expected\_image\_sets\_per\_plate: 3456
+expected_image_sets_per_plate: 3456
 
 metadata:
 
-  plate\_id\_column: PlateID
+plate_id_column: PlateID
 
----
+______________________________________________________________________
 
 ## CLI Interface
 
 ### Validate dataset
 
-meerqat validate /data/CHP-134   \--metadata metadata.xlsx   \--config assay.yaml
+meerqat validate /data/CHP-134 --metadata metadata.xlsx --config assay.yaml
 
 ### Suggest config
 
@@ -296,87 +305,87 @@ meerqat suggest-config /data
 
 meerqat explain /data
 
----
+______________________________________________________________________
 
 ## LLM Integration
 
 ### Backend
 
-- `llama.cpp` (local models)  
+- `llama.cpp` (local models)
 - GGUF models from Hugging Face
 
 ### Structured Output
 
-- `instructor`  
+- `instructor`
 - `pydantic` schemas
 
 ### Tasks
 
-- Naming pattern inference  
-- Alias detection  
-- Anomaly explanation  
+- Naming pattern inference
+- Alias detection
+- Anomaly explanation
 - Config suggestion
 
----
+______________________________________________________________________
 
 ## Design Principles
 
-### 1\. Early Detection
+### 1. Early Detection
 
 Catch issues before pipelines run.
 
-### 2\. Transparency
+### 2. Transparency
 
 Show evidence for every issue.
 
-### 3\. Non-Judgmental
+### 3. Non-Judgmental
 
 Avoid blame; focus on clarity.
 
-### 4\. Configurable
+### 4. Configurable
 
 Support diverse assay types.
 
-### 5\. Extensible
+### 5. Extensible
 
 Modular rules and LLM components.
 
----
+______________________________________________________________________
 
 ## MVP Scope
 
-- Dataset scanning  
-- XML \+ metadata parsing  
-- Core validation rules  
-- JSON \+ CLI reporting
+- Dataset scanning
+- XML + metadata parsing
+- Core validation rules
+- JSON + CLI reporting
 
----
+______________________________________________________________________
 
 ## Future Work
 
-- OME-Zarr support  
-- Image-level QC  
-- Visualization dashboards  
-- CI integration  
+- OME-Zarr support
+- Image-level QC
+- Visualization dashboards
+- CI integration
 - Batch validation workflows
 
----
+______________________________________________________________________
 
 ## Success Criteria
 
-Meerqat successfully identifies:
+MeerQat successfully identifies:
 
-- Missing required files  
-- Naming inconsistencies  
-- Metadata gaps  
-- Folder/XML mismatches  
+- Missing required files
+- Naming inconsistencies
+- Metadata gaps
+- Folder/XML mismatches
 - Partial datasets
 
 And provides actionable guidance before analysis begins.
 
----
+______________________________________________________________________
 
 ## Positioning
 
-**Meerqat** is a sentinel for bioimaging datasets —  
-detecting issues early so your analysis can proceed with confidence.  
+**MeerQat** is a sentinel for bioimaging datasets —
+detecting issues early so your analysis can proceed with confidence.

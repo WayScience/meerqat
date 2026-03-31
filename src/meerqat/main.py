@@ -6,8 +6,8 @@ from pathlib import Path
 
 from meerqat.config import LLMConfig, ValidationConfig, load_config
 from meerqat.ingestion import ingest_dataset
-from meerqat.llm import generate_advisory_hints
-from meerqat.models import BatchValidationReport, ValidationReport
+from meerqat.llm import generate_llm_review
+from meerqat.models import BatchValidationReport, LLMReview, ValidationReport
 from meerqat.reporting import (
     report_to_html,
     report_to_markdown,
@@ -35,13 +35,20 @@ def validate_dataset(
         config=active_config,
     )
     report = validate_dataset_model(dataset, active_config)
-    hints = generate_advisory_hints(report, active_config.llm)
+    llm_review = generate_llm_review(report, active_config.llm)
     return ValidationReport(
         summary=report.summary,
         issues=report.issues,
         dataset=report.dataset,
         rule_results=report.rule_results,
-        advisory_hints=hints,
+        advisory_hints=llm_review.hints,
+        llm_findings=llm_review.findings,
+        llm_review=LLMReview(
+            status=llm_review.status,
+            provider=llm_review.provider,
+            model=llm_review.model,
+            error=llm_review.error,
+        ),
     )
 
 

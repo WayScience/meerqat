@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from difflib import SequenceMatcher
 from pathlib import Path
 from xml.etree import ElementTree
 
 import pandas as pd
 
 from meerqat.config import IMAGE_EXTENSIONS, ValidationConfig
-from meerqat.models import Dataset, MetadataRecord, Plate
+from meerqat.models import Dataset, FiletreeSummary, MetadataRecord, Plate
+
+SIMILAR_DIRECTORY_THRESHOLD = 0.88
 
 
 def _looks_like_plate(path: Path) -> bool:
     """Detect whether a directory appears to contain a plate."""
-    if any(path.glob("*.xml")):
+    if any(path.rglob("*.xml")):
         return True
     for extension in IMAGE_EXTENSIONS:
         if extension.startswith(".ome."):
@@ -22,7 +26,7 @@ def _looks_like_plate(path: Path) -> bool:
             continue
         if any(path.rglob(f"*{extension}")):
             return True
-    return any(path.glob("*.ome.zarr"))
+    return any(path.rglob("*.ome.zarr"))
 
 
 def _discover_plate_dirs(dataset_root: Path) -> list[Path]:
@@ -41,7 +45,10 @@ def _find_xml_path(plate_dir: Path) -> Path | None:
     preferred = plate_dir / "Index.xml"
     if preferred.exists():
         return preferred
-    xml_files = sorted(plate_dir.glob("*.xml"))
+    nested_preferred = sorted(plate_dir.rglob("Index.xml"))
+    if nested_preferred:
+        return nested_preferred[0]
+    xml_files = sorted(plate_dir.rglob("*.xml"))
     return xml_files[0] if xml_files else None
 
 
@@ -94,6 +101,40 @@ def _image_modalities(image_files: tuple[Path, ...]) -> tuple[str, ...]:
         for path in image_files
     }
     return tuple(sorted(modalities))
+
+
+def _build_filetree_summary(dataset_root: Path) -> FiletreeSummary:
+    """Summarize dataset-wide filetree patterns."""
+    paths = tuple(dataset_root.rglob("*"))
+    directory_children = Counter(str(path.parent.resolve()) for path in paths)
+    empty_directories = tuple(
+        sorted(
+            str(path.resolve())
+            for path in paths
+            if path.is_dir() and directory_children[str(path.resolve())] == 0
+        )
+    )
+    file_extensions = dict(
+        sorted(
+            Counter(
+                path.suffix for path in paths if path.is_file() and path.suffix
+            ).items()
+        )
+    )
+    directories = tuple(sorted(path.resolve() for path in paths if path.is_dir()))
+    similar_pairs: list[tuple[str, str]] = []
+    for index, left in enumerate(directories):
+        left_text = str(left.relative_to(dataset_root))
+        for right in directories[index + 1 :]:
+            right_text = str(right.relative_to(dataset_root))
+            similarity = SequenceMatcher(None, left_text, right_text).ratio()
+            if similarity >= SIMILAR_DIRECTORY_THRESHOLD:
+                similar_pairs.append((str(left), str(right)))
+    return FiletreeSummary(
+        file_extensions=file_extensions,
+        empty_directories=empty_directories,
+        similarly_named_directories=tuple(similar_pairs),
+    )
 
 
 def load_metadata_records(
@@ -158,4 +199,5 @@ def ingest_dataset(
         root=root,
         plates=tuple(plates),
         metadata_records=metadata_records,
+        filetree_summary=_build_filetree_summary(root),
     )

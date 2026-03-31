@@ -86,6 +86,36 @@ def validate_dataset_model(  # noqa: C901, PLR0912
             )
         )
 
+    for directory in dataset.filetree_summary.empty_directories:
+        issues.append(
+            _issue(
+                "dataset.empty_directory",
+                "warning",
+                f"Empty directory detected at '{directory}'.",
+                path=Path(directory),
+                remediation=(
+                    "Remove the empty directory or confirm it is expected output."
+                ),
+            )
+        )
+
+    for left, right in dataset.filetree_summary.similarly_named_directories:
+        issues.append(
+            _issue(
+                "dataset.similar_directories",
+                "warning",
+                (
+                    "Extremely similar directory names were detected: "
+                    f"'{left}' and '{right}'."
+                ),
+                path=dataset.root,
+                remediation=(
+                    "Confirm that these directories are not accidental duplicates "
+                    "or naming drift."
+                ),
+            )
+        )
+
     for plate in dataset.plates:
         if (
             template.plate_name_pattern
@@ -105,7 +135,12 @@ def validate_dataset_model(  # noqa: C901, PLR0912
             )
 
         for required_file in template.required_files:
-            if not (plate.path / required_file).exists():
+            required_file_exists = (
+                plate.xml_path is not None
+                if required_file == "Index.xml"
+                else any(plate.path.rglob(required_file))
+            )
+            if not required_file_exists:
                 issues.append(
                     _issue(
                         "plate.missing_required_file",
@@ -267,5 +302,11 @@ def validate_dataset_model(  # noqa: C901, PLR0912
             "template": template.name,
             "expected_plate_count": config.expected_plate_count,
             "expected_images_per_plate": template.expected_images_per_plate,
+            "file_extensions": dataset.filetree_summary.file_extensions,
+            "empty_directories": list(dataset.filetree_summary.empty_directories),
+            "similarly_named_directories": [
+                list(pair)
+                for pair in dataset.filetree_summary.similarly_named_directories
+            ],
         },
     )
