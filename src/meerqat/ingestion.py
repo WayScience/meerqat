@@ -1,0 +1,161 @@
+"""Dataset scanning and parsing helpers."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from xml.etree import ElementTree
+
+import pandas as pd
+
+from meerqat.config import IMAGE_EXTENSIONS, ValidationConfig
+from meerqat.models import Dataset, MetadataRecord, Plate
+
+
+def _looks_like_plate(path: Path) -> bool:
+    """Detect whether a directory appears to contain a plate."""
+    if any(path.glob("*.xml")):
+        return True
+    for extension in IMAGE_EXTENSIONS:
+        if extension.startswith(".ome."):
+            if any(path.rglob(f"*{extension}")):
+                return True
+            continue
+        if any(path.rglob(f"*{extension}")):
+            return True
+    return any(path.glob("*.ome.zarr"))
+
+
+def _discover_plate_dirs(dataset_root: Path) -> list[Path]:
+    """Find candidate plate directories."""
+    children = sorted(path for path in dataset_root.iterdir() if path.is_dir())
+    plates = [path for path in children if _looks_like_plate(path)]
+    if plates:
+        return plates
+    if _looks_like_plate(dataset_root):
+        return [dataset_root]
+    return children
+
+
+def _find_xml_path(plate_dir: Path) -> Path | None:
+    """Pick the most relevant XML path for a plate."""
+    preferred = plate_dir / "Index.xml"
+    if preferred.exists():
+        return preferred
+    xml_files = sorted(plate_dir.glob("*.xml"))
+    return xml_files[0] if xml_files else None
+
+
+def _extract_xml_plate_id(xml_path: Path | None) -> str | None:
+    """Extract a plate identifier from XML content when possible."""
+    if xml_path is None:
+        return None
+    root = ElementTree.parse(xml_path).getroot()
+    candidates: list[str] = []
+    for key in ("PlateID", "PlateName", "Name", "ID", "id", "name"):
+        value = root.attrib.get(key)
+        if value:
+            candidates.append(value)
+    for element in root.iter():
+        if element.tag.lower().endswith("plate") or "plate" in element.tag.lower():
+            for key in ("id", "name", "plateid", "platename"):
+                value = element.attrib.get(key)
+                if value:
+                    candidates.append(value)
+            text = (element.text or "").strip()
+            if text:
+                candidates.append(text)
+    return candidates[0] if candidates else None
+
+
+def _collect_image_files(plate_dir: Path) -> tuple[Path, ...]:
+    """Collect supported image assets."""
+    image_files: list[Path] = []
+    for extension in IMAGE_EXTENSIONS:
+        image_files.extend(
+            path for path in plate_dir.rglob(f"*{extension}") if path.is_file()
+        )
+    image_files.extend(path for path in plate_dir.glob("*.ome.zarr") if path.is_dir())
+    return tuple(sorted(set(image_files)))
+
+
+def _zero_byte_images(image_files: tuple[Path, ...]) -> tuple[Path, ...]:
+    """Return any zero-byte image files."""
+    return tuple(
+        path for path in image_files if path.is_file() and path.stat().st_size == 0
+    )
+
+
+def _image_modalities(image_files: tuple[Path, ...]) -> tuple[str, ...]:
+    """Infer image modality extensions."""
+    modalities = {
+        ".ome.zarr"
+        if path.name.endswith(".ome.zarr")
+        else "".join(path.suffixes[-2:]) or path.suffix
+        for path in image_files
+    }
+    return tuple(sorted(modalities))
+
+
+def load_metadata_records(
+    metadata_paths: list[str | Path],
+    config: ValidationConfig,
+) -> tuple[MetadataRecord, ...]:
+    """Load metadata from CSV or XLSX files."""
+    records: list[MetadataRecord] = []
+    for raw_path in metadata_paths:
+        path = Path(raw_path)
+        if path.suffix.lower() == ".csv":
+            frame = pd.read_csv(path)
+        else:
+            frame = pd.read_excel(path)
+        frame.columns = [str(column).strip() for column in frame.columns]
+        if config.metadata_plate_column not in frame.columns:
+            continue
+        for row in frame.to_dict(orient="records"):
+            plate_value = row.get(config.metadata_plate_column)
+            if plate_value is None:
+                continue
+            records.append(
+                MetadataRecord(
+                    plate_id=str(plate_value),
+                    source=str(path),
+                    values=dict(row),
+                )
+            )
+    return tuple(records)
+
+
+def ingest_dataset(
+    dataset_path: str | Path,
+    *,
+    metadata_paths: list[str | Path] | None = None,
+    config: ValidationConfig | None = None,
+) -> Dataset:
+    """Scan a dataset into a normalized in-memory model."""
+    active_config = config or ValidationConfig()
+    root = Path(dataset_path).resolve()
+    plate_dirs = _discover_plate_dirs(root)
+    plates: list[Plate] = []
+    for plate_dir in plate_dirs:
+        xml_path = _find_xml_path(plate_dir)
+        xml_plate_id = _extract_xml_plate_id(xml_path) if xml_path is not None else None
+        image_files = _collect_image_files(plate_dir)
+        plates.append(
+            Plate(
+                plate_id=plate_dir.name,
+                path=plate_dir,
+                xml_path=xml_path,
+                xml_plate_id=xml_plate_id,
+                image_files=image_files,
+                zero_byte_images=_zero_byte_images(image_files),
+                image_modalities=_image_modalities(image_files),
+            )
+        )
+    metadata_records = load_metadata_records(metadata_paths or [], active_config)
+    dataset_id = active_config.dataset_id or root.name
+    return Dataset(
+        dataset_id=dataset_id,
+        root=root,
+        plates=tuple(plates),
+        metadata_records=metadata_records,
+    )
