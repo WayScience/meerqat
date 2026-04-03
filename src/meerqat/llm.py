@@ -266,8 +266,8 @@ def _validated_models_url(base_url: str) -> str:
 
 def _is_local_base_url(base_url: str) -> bool:
     """Return whether the configured endpoint points at localhost."""
-    hostname = urllib_parse.urlsplit(base_url).hostname
-    return hostname in {"127.0.0.1", "localhost"}
+    hostname = (urllib_parse.urlsplit(base_url).hostname or "").strip("[]").lower()
+    return hostname in {"127.0.0.1", "localhost", "::1"}
 
 
 def _server_is_ready(base_url: str) -> bool:
@@ -777,11 +777,6 @@ def run_ready_checks(config: LLMConfig) -> ReadyReport:
             )
     else:
         try:
-            model_path = get_cached_model_path(
-                spec,
-                cache_dir=config.cache_dir,
-                offline=config.offline,
-            )
             llm = _build_langchain_llm(model_path, config)
             response = llm.invoke("Reply with READY.")
             checks.append(

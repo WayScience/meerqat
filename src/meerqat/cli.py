@@ -6,6 +6,7 @@ import argparse
 import json
 import sys
 import traceback
+from dataclasses import replace
 from pathlib import Path
 
 from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
@@ -37,25 +38,26 @@ def _render_stdout(
 def _build_llm_config(args: argparse.Namespace, base: ValidationConfig) -> LLMConfig:
     """Build LLM config from CLI arguments."""
     existing = base.llm
-    model_alias = args.llm_model or existing.model_alias
-    return LLMConfig(
-        enabled=existing.enabled,
-        provider=args.llm_provider or existing.provider,
-        model_alias=model_alias,
-        repo_id=args.llm_repo_id or existing.repo_id,
-        filename=args.llm_filename or existing.filename,
-        cache_dir=Path(args.llm_cache_dir)
-        if args.llm_cache_dir
-        else existing.cache_dir,
-        offline=args.offline or existing.offline,
-        n_ctx=args.llm_n_ctx or existing.n_ctx,
-        n_threads=args.llm_threads or existing.n_threads,
-        max_tokens=args.llm_max_tokens or existing.max_tokens,
-        temperature=args.llm_temperature
-        if args.llm_temperature is not None
-        else existing.temperature,
-        base_url=args.llm_base_url or existing.base_url,
-    )
+    updates: dict[str, object] = {}
+    for arg_name, field_name in (
+        ("llm_provider", "provider"),
+        ("llm_model", "model_alias"),
+        ("llm_repo_id", "repo_id"),
+        ("llm_filename", "filename"),
+        ("llm_n_ctx", "n_ctx"),
+        ("llm_threads", "n_threads"),
+        ("llm_max_tokens", "max_tokens"),
+        ("llm_temperature", "temperature"),
+        ("llm_base_url", "base_url"),
+    ):
+        value = getattr(args, arg_name)
+        if value is not None:
+            updates[field_name] = value
+    if args.llm_cache_dir is not None:
+        updates["cache_dir"] = Path(args.llm_cache_dir)
+    if args.offline:
+        updates["offline"] = True
+    return replace(existing, **updates)
 
 
 def _validate_command(args: argparse.Namespace) -> int:
@@ -166,6 +168,11 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--report-html")
         target.add_argument("--fail-on-warning", action="store_true")
 
+    def add_batch_validation_flags(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--metadata", action="append")
+        target.add_argument("--report-json")
+        target.add_argument("--fail-on-warning", action="store_true")
+
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("dataset")
     add_shared_flags(validate_parser)
@@ -176,7 +183,7 @@ def build_parser() -> argparse.ArgumentParser:
     batch_parser = subparsers.add_parser("batch-validate")
     batch_parser.add_argument("datasets", nargs="+")
     add_shared_flags(batch_parser)
-    add_validation_flags(batch_parser)
+    add_batch_validation_flags(batch_parser)
     add_llm_flags(batch_parser)
     batch_parser.set_defaults(handler=_batch_validate_command)
 

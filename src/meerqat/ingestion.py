@@ -15,20 +15,38 @@ from meerqat.models import Dataset, FiletreeSummary, MetadataRecord, Plate
 
 SIMILAR_DIRECTORY_THRESHOLD = 0.88
 METADATA_EXTENSIONS = (".csv", ".xlsx", ".xls")
+COMPOUND_IMAGE_EXTENSIONS = (".ome.zarr", ".ome.tif", ".ome.tiff")
+
+
+def _supported_image_extension(path: Path) -> str | None:
+    """Return the canonical supported image extension for a path."""
+    name = path.name.lower()
+    for extension in COMPOUND_IMAGE_EXTENSIONS:
+        if name.endswith(extension):
+            return extension
+    suffix = path.suffix.lower()
+    return suffix if suffix in IMAGE_EXTENSIONS else None
+
+
+def _inventory_extension(path: Path) -> str | None:
+    """Return the extension label used for filetree inventory."""
+    compound_extension = _supported_image_extension(path)
+    if compound_extension is not None:
+        return compound_extension
+    if path.is_file():
+        return path.suffix.lower() or None
+    return None
 
 
 def _looks_like_plate(path: Path) -> bool:
     """Detect whether a directory appears to contain a plate."""
     if any(path.rglob("*.xml")):
         return True
-    for extension in IMAGE_EXTENSIONS:
-        if extension.startswith(".ome."):
-            if any(path.rglob(f"*{extension}")):
-                return True
-            continue
-        if any(path.rglob(f"*{extension}")):
-            return True
-    return any(path.rglob("*.ome.zarr"))
+    return any(
+        _supported_image_extension(candidate) is not None
+        for candidate in path.rglob("*")
+        if candidate.is_file() or candidate.is_dir()
+    )
 
 
 def _discover_plate_dirs(dataset_root: Path) -> list[Path]:
@@ -81,12 +99,12 @@ def _extract_xml_plate_id(xml_path: Path | None) -> str | None:
 
 def _collect_image_files(plate_dir: Path) -> tuple[Path, ...]:
     """Collect supported image assets."""
-    image_files: list[Path] = []
-    for extension in IMAGE_EXTENSIONS:
-        image_files.extend(
-            path for path in plate_dir.rglob(f"*{extension}") if path.is_file()
-        )
-    image_files.extend(path for path in plate_dir.glob("*.ome.zarr") if path.is_dir())
+    image_files = [
+        path
+        for path in plate_dir.rglob("*")
+        if _supported_image_extension(path) is not None
+        and (path.is_file() or path.is_dir())
+    ]
     return tuple(sorted(set(image_files)))
 
 
@@ -100,9 +118,7 @@ def _zero_byte_images(image_files: tuple[Path, ...]) -> tuple[Path, ...]:
 def _image_modalities(image_files: tuple[Path, ...]) -> tuple[str, ...]:
     """Infer image modality extensions."""
     modalities = {
-        ".ome.zarr"
-        if path.name.endswith(".ome.zarr")
-        else "".join(path.suffixes[-2:]) or path.suffix
+        _supported_image_extension(path) or (path.suffix.lower() or path.name.lower())
         for path in image_files
     }
     return tuple(sorted(modalities))
@@ -123,8 +139,10 @@ def _build_filetree_summary(dataset_root: Path) -> FiletreeSummary:
             relative = resolved.relative_to(dataset_root)
             bucket_key = (len(relative.parts), resolved.name.lower()[:4])
             similarity_buckets[bucket_key].append(resolved)
-        elif path.is_file() and path.suffix:
-            file_extensions[path.suffix] += 1
+        elif path.is_file() or path.is_dir():
+            extension = _inventory_extension(path)
+            if extension is not None:
+                file_extensions[extension] += 1
 
     empty_directories = tuple(
         sorted(str(path) for path in directories if directory_children[str(path)] == 0)
@@ -165,11 +183,12 @@ def load_metadata_records(
             plate_value = row.get(config.metadata_plate_column)
             if plate_value is None or pd.isna(plate_value):
                 continue
-            if not str(plate_value).strip():
+            normalized_plate_id = str(plate_value).strip()
+            if not normalized_plate_id:
                 continue
             records.append(
                 MetadataRecord(
-                    plate_id=str(plate_value),
+                    plate_id=normalized_plate_id,
                     source=str(path),
                     values=dict(row),
                 )
@@ -232,7 +251,7 @@ def ingest_dataset(
         )
     resolved_metadata_paths = (
         [Path(path) for path in metadata_paths]
-        if metadata_paths
+        if metadata_paths is not None
         else list(_discover_metadata_paths(root))
     )
     metadata_records = load_metadata_records(resolved_metadata_paths, active_config)

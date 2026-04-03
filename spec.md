@@ -101,7 +101,8 @@ MeerQat consists of two validation layers:
 ### 2. LLM-Assisted Pattern Inference (Advisory)
 
 - Prefers Instructor with a local OpenAI-compatible `llama.cpp` server
-- Falls back to direct local GGUF execution when Instructor is unavailable
+- Falls back to the `langchain` provider when `instructor` is unavailable
+- Tests exercise `langchain` as MeerQat's implemented fallback path
 - Provides:
   - pattern inference
   - anomaly explanations
@@ -281,13 +282,17 @@ ______________________________________________________________________
 
 meerqat validate /data/CHP-134 --metadata metadata.xlsx --config assay.yaml
 
-### Suggest config
+### Batch validate datasets
 
-meerqat suggest-config /data
+meerqat batch-validate /data/run1 /data/run2 --report-json batch-report.json
 
-### Explain anomalies
+### List built-in model presets
 
-meerqat explain /data
+meerqat models
+
+### Check local runtime readiness
+
+meerqat ready
 
 ______________________________________________________________________
 

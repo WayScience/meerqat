@@ -37,10 +37,22 @@ from tempfile import TemporaryDirectory
 
 from meerqat import ValidationConfig, validate_dataset, write_reports
 
+
+def find_repo_root(start: pathlib.Path) -> pathlib.Path:
+    """Walk upward until a repository marker is found."""
+    for candidate in (start, *start.parents):
+        if any(
+            (candidate / marker).exists()
+            for marker in (".git", "pyproject.toml", "setup.py")
+        ):
+            return candidate
+    raise RuntimeError("Could not locate the MeerQat repository root.")
+
+
 if "__file__" in globals():
     repo_root = pathlib.Path(__file__).resolve().parents[2]
 else:
-    repo_root = pathlib.Path("../..").resolve()
+    repo_root = find_repo_root(pathlib.Path.cwd().resolve())
 # -
 
 # ## Validate a Known-Good Dataset
