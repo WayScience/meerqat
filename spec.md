@@ -226,28 +226,35 @@ ______________________________________________________________________
 ```python
 class Dataset:
     dataset_id: str | None
+    root: Path
     plates: list[Plate]
     metadata_records: list[MetadataRecord]
+    filetree_summary: FiletreeSummary
 ```
 
 ### Plate
 
 ```python
 class Plate:
-    folder_name: str
-    normalized_plate_id: str | None
+    plate_id: str
+    path: Path
+    xml_path: Path | None
     xml_plate_id: str | None
-    metadata_plate_id: str | None
+    image_files: list[Path]
+    zero_byte_images: list[Path]
+    image_modalities: list[str]
 ```
 
 ### ValidationIssue
 
 ```python
 class ValidationIssue:
-    rule_id: str
+    code: str
     severity: str
     message: str
-    entity_id: str | None
+    plate_id: str | None
+    path: str | None
+    remediation: str | None
 ```
 
 ______________________________________________________________________
@@ -257,21 +264,13 @@ ______________________________________________________________________
 Example YAML:
 
 ```yaml
-dataset:
-  dataset_id: CHP-134
-
-plate_naming:
-  regex: "^BR[0-9]+$"
-
+dataset_id: CHP-134
+plate_name_pattern: "^BR[0-9]+$"
 required_files:
   - "Images/Index.xml"
-
-expectations:
-  expected_plate_count: 27
-  expected_image_sets_per_plate: 3456
-
-metadata:
-  plate_id_column: PlateID
+expected_plate_count: 27
+expected_images_per_plate: 3456
+metadata_plate_column: PlateID
 ```
 
 ______________________________________________________________________

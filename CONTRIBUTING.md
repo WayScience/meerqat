@@ -51,7 +51,7 @@ We recommend testing your work before opening pull requests with proposed change
 You can run pytest on your work using the following example:
 
 ```sh
-% uv run pytest
+% uv run --frozen pytest
 ```
 
 ## Making changes to this repository
@@ -96,7 +96,11 @@ Versioning for the project is intended to align with GitHub Releases which provi
 
 ### Releases
 
-We publish source code by using [GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases) available [here](https://github.com/wayscience/meerqat/releases).
+We publish source code using
+[GitHub Releases](https://docs.github.com/en/repositories/releasing-projects-on-github/about-releases)
+on the
+[MeerQat Releases on GitHub](https://github.com/wayscience/meerqat/releases)
+page.
 
 #### Release Publishing Process
 

@@ -206,7 +206,16 @@ def _prepare_macos_cpu_runtime(config: LLMConfig) -> Path:
     try:
         return build_runtime(_default_runtime_dir(config))
     except PermissionError:
-        temp_root = Path(tempfile.gettempdir()) / "meerqat" / MACOS_CPU_RUNTIME_DIRNAME
+        temp_root = (
+            Path(
+                tempfile.mkdtemp(
+                    prefix="meerqat-",
+                    dir=tempfile.gettempdir(),
+                )
+            )
+            / MACOS_CPU_RUNTIME_DIRNAME
+        )
+        os.chmod(temp_root.parent, 0o700)
         return build_runtime(temp_root)
 
 
@@ -666,13 +675,7 @@ def _attempt_langchain_review(
     """Run the fallback LangChain path and normalize import/runtime failures."""
     try:
         return _invoke_langchain(report, config), None
-    except (
-        ImportError,
-        AttributeError,
-        ModuleNotFoundError,
-        OSError,
-        ValueError,
-    ) as error:
+    except Exception as error:
         return None, error
 
 

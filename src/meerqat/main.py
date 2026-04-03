@@ -130,6 +130,13 @@ def write_reports(
     """Write report outputs."""
     if json_path is not None:
         write_json_report(json_path, report)
+    if isinstance(report, BatchValidationReport) and (
+        markdown_path is not None or html_path is not None
+    ):
+        raise ValueError(
+            "BatchValidationReport only supports JSON output. "
+            "Use single-dataset validation for Markdown or HTML reports."
+        )
     if isinstance(report, ValidationReport):
         if markdown_path is not None:
             write_report_file(markdown_path, report_to_markdown(report))

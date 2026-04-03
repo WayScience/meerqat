@@ -161,7 +161,7 @@ class ValidationConfig:
 
     dataset_id: str | None = None
     assay_template: str = "phenix_harmony"
-    required_files: tuple[str, ...] = ()
+    required_files: tuple[str, ...] | None = None
     plate_name_pattern: str | None = None
     expected_images_per_plate: int | None = None
     expected_plate_count: int | None = None
@@ -206,10 +206,20 @@ class ValidationConfig:
     def resolved_template(self) -> AssayTemplate:
         """Merge built-in templates with explicit overrides."""
         template = DEFAULT_ASSAY_TEMPLATES[self.assay_template]
-        required_files = self.required_files or template.required_files
-        plate_name_pattern = self.plate_name_pattern or template.plate_name_pattern
+        required_files = (
+            self.required_files
+            if self.required_files is not None
+            else template.required_files
+        )
+        plate_name_pattern = (
+            self.plate_name_pattern
+            if self.plate_name_pattern is not None
+            else template.plate_name_pattern
+        )
         expected_images_per_plate = (
-            self.expected_images_per_plate or template.expected_images_per_plate
+            self.expected_images_per_plate
+            if self.expected_images_per_plate is not None
+            else template.expected_images_per_plate
         )
         return AssayTemplate(
             name=template.name,

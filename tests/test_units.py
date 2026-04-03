@@ -85,6 +85,15 @@ def test_load_config_and_template_resolution(tmp_path: Path) -> None:
     assert template.require_xml is False
 
 
+def test_resolved_template_honors_explicit_empty_required_files() -> None:
+    """Explicit empty required_files overrides should be preserved."""
+    config = ValidationConfig(required_files=())
+
+    template = config.resolved_template()
+
+    assert template.required_files == ()
+
+
 def test_invalid_config_values_raise_clear_errors() -> None:
     """Config validation should reject impossible runtime values."""
     with pytest.raises(ValueError, match=r"llm\.n_ctx must be positive"):

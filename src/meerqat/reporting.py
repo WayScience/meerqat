@@ -135,6 +135,7 @@ def report_to_markdown(report: ValidationReport) -> str:
 
 def report_to_html(report: ValidationReport) -> str:
     """Render a report as lightweight HTML."""
+    dataset_title = html.escape(report.summary.dataset_id or "Unknown")
     issue_items = (
         "".join(
             (
@@ -184,7 +185,7 @@ def report_to_html(report: ValidationReport) -> str:
     )
     return (
         "<html><head><title>Meerqat Report</title></head><body>"
-        f"<h1>Meerqat Report: {html.escape(report.summary.dataset_id)}</h1>"
+        f"<h1>Meerqat Report: {dataset_title}</h1>"
         "<p>Schema version: <strong>"
         f"{html.escape(report.provenance.schema_version)}</strong></p>"
         "<p>Generated at: <strong>"

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import defusedxml.ElementTree as ET
 import pandas as pd
+from defusedxml.common import DefusedXmlException
 
 from meerqat.config import IMAGE_EXTENSIONS, ValidationConfig
 from meerqat.models import Dataset, FiletreeSummary, MetadataRecord, Plate
@@ -57,7 +58,10 @@ def _extract_xml_plate_id(xml_path: Path | None) -> str | None:
     """Extract a plate identifier from XML content when possible."""
     if xml_path is None:
         return None
-    root = ET.parse(xml_path).getroot()
+    try:
+        root = ET.parse(xml_path).getroot()
+    except (ET.ParseError, DefusedXmlException, OSError):
+        return None
     candidates: list[str] = []
     for key in ("PlateID", "PlateName", "Name", "ID", "id", "name"):
         value = root.attrib.get(key)
@@ -159,7 +163,9 @@ def load_metadata_records(
             continue
         for row in frame.to_dict(orient="records"):
             plate_value = row.get(config.metadata_plate_column)
-            if plate_value is None:
+            if plate_value is None or pd.isna(plate_value):
+                continue
+            if not str(plate_value).strip():
                 continue
             records.append(
                 MetadataRecord(
@@ -173,23 +179,29 @@ def load_metadata_records(
 
 def _discover_metadata_paths(dataset_root: Path) -> tuple[Path, ...]:
     """Look for likely metadata files near the dataset root."""
-    search_roots = (dataset_root, dataset_root.parent)
-    candidates: list[Path] = []
-    for search_root in search_roots:
-        if not search_root.exists():
-            continue
+    preferred_stems = {"metadata", "meta", "plate_metadata"}
+    local_candidates: list[Path] = []
+    parent_candidates: list[Path] = []
+    if dataset_root.exists():
         for extension in METADATA_EXTENSIONS:
-            candidates.extend(
-                path for path in search_root.glob(f"*{extension}") if path.is_file()
+            local_candidates.extend(
+                path for path in dataset_root.glob(f"*{extension}") if path.is_file()
             )
-    unique_candidates = sorted(set(candidates))
-    preferred = [
-        path
-        for path in unique_candidates
-        if path.stem.lower() in {"metadata", "meta", "plate_metadata"}
+    if dataset_root.parent.exists():
+        for extension in METADATA_EXTENSIONS:
+            parent_candidates.extend(
+                path
+                for path in dataset_root.parent.glob(f"*{extension}")
+                if path.is_file() and path.stem.lower() in preferred_stems
+            )
+    unique_local = sorted(set(local_candidates))
+    preferred_local = [
+        path for path in unique_local if path.stem.lower() in preferred_stems
     ]
-    remainder = [path for path in unique_candidates if path not in preferred]
-    return tuple(preferred + remainder)
+    remaining_local = [path for path in unique_local if path not in preferred_local]
+    unique_parent = sorted(set(parent_candidates))
+    parent_results = unique_parent if len(unique_parent) == 1 else []
+    return tuple(preferred_local + remaining_local + parent_results)
 
 
 def ingest_dataset(

@@ -135,6 +135,26 @@ def test_write_reports_outputs_all_formats(
     assert "<html>" in html_path.read_text(encoding="utf-8")
 
 
+def test_write_reports_rejects_batch_markdown_html(
+    valid_dataset: Path,
+    metadata_csv: Path,
+    config_without_llm: ValidationConfig,
+) -> None:
+    """Batch reports should fail fast for Markdown and HTML outputs."""
+    batch = batch_validate(
+        [valid_dataset],
+        metadata_paths=[metadata_csv],
+        config=config_without_llm,
+    )
+
+    try:
+        write_reports(batch, markdown_path="report.md")
+    except ValueError as error:
+        assert "BatchValidationReport only supports JSON output" in str(error)
+    else:  # pragma: no cover - defensive
+        raise AssertionError("Expected ValueError for batch Markdown output.")
+
+
 def test_batch_validate_aggregates_reports(
     valid_dataset: Path,
     metadata_csv: Path,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import traceback
 from pathlib import Path
 
 from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
@@ -121,6 +122,11 @@ def _ready_command(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
     parser = argparse.ArgumentParser(prog="meerqat")
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Print a full traceback on CLI system errors.",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_shared_flags(target: argparse.ArgumentParser) -> None:
@@ -192,6 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return int(args.handler(args))
     except Exception as error:
+        if getattr(args, "debug", False):
+            traceback.print_exc(file=sys.stderr)
         print(f"Meerqat system error: {error}", file=sys.stderr)
         return 3
 
