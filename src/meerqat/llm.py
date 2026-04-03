@@ -22,7 +22,13 @@ from urllib import request as urllib_request
 from pydantic import BaseModel, Field, ValidationError
 
 from meerqat.config import LLMConfig, ModelSpec
-from meerqat.models import AdvisoryHint, LLMFinding, ValidationReport
+from meerqat.models import (
+    LLMFinding,
+    LLMHint,
+    ReadyCheck,
+    ReadyReport,
+    ValidationReport,
+)
 
 _SERVER_PROCESSES: dict[str, subprocess.Popen[str]] = {}
 HTTP_SERVER_ERROR_STATUS = 500
@@ -38,8 +44,8 @@ HF_HUB_DISABLE_PROGRESS_ENV = "HF_HUB_DISABLE_PROGRESS_BARS"
 TQDM_IPROGRESS_WARNING = "IProgress not found"
 
 
-class AdvisoryHintModel(BaseModel):
-    """Structured advisory item."""
+class HintModel(BaseModel):
+    """Structured hint item."""
 
     title: str
     detail: str
@@ -57,16 +63,16 @@ class FindingModel(BaseModel):
 
 
 class AdvisoryPayload(BaseModel):
-    """Structured advisory output."""
+    """Structured LLM review output."""
 
-    hints: list[AdvisoryHintModel] = Field(default_factory=list)
+    hints: list[HintModel] = Field(default_factory=list)
     findings: list[FindingModel] = Field(default_factory=list)
 
 
 class LLMReviewResult(BaseModel):
     """Structured result returned to the main validation flow."""
 
-    hints: tuple[AdvisoryHint, ...] = ()
+    hints: tuple[LLMHint, ...] = ()
     findings: tuple[LLMFinding, ...] = ()
     provider: str | None = None
     model: str | None = None
@@ -436,7 +442,7 @@ def _payload_to_review(
     """Convert a structured payload into a review result."""
     return LLMReviewResult(
         hints=tuple(
-            AdvisoryHint(
+            LLMHint(
                 title=hint.title,
                 detail=hint.detail,
                 confidence=hint.confidence,
@@ -517,7 +523,7 @@ def _parse_payload(raw: str, *, provider: str, model: str) -> LLMReviewResult:
     except (json.JSONDecodeError, ValidationError) as error:
         return LLMReviewResult(
             hints=(
-                AdvisoryHint(
+                LLMHint(
                     title="LLM output could not be parsed",
                     detail=f"LLM review returned invalid structured output: {error}",
                     confidence="low",
@@ -531,8 +537,8 @@ def _parse_payload(raw: str, *, provider: str, model: str) -> LLMReviewResult:
     return _payload_to_review(payload, provider=provider, model=model)
 
 
-def _parse_hints(raw: str) -> tuple[AdvisoryHint, ...]:
-    """Parse JSON advisory hints."""
+def _parse_hints(raw: str) -> tuple[LLMHint, ...]:
+    """Parse JSON LLM review hints."""
     return _parse_payload(raw, provider="unknown", model="unknown").hints
 
 
@@ -627,6 +633,141 @@ def _attempt_langchain_review(
         return None, error
 
 
+def run_ready_checks(config: LLMConfig) -> ReadyReport:
+    """Exercise the configured local LLM runtime and return readiness results."""
+    checks: list[ReadyCheck] = []
+    spec = config.resolved_model()
+
+    try:
+        model_path = get_cached_model_path(
+            spec,
+            cache_dir=config.cache_dir,
+            offline=config.offline,
+        )
+        checks.append(
+            ReadyCheck(
+                name="model_path",
+                status="pass",
+                detail=f"Resolved model at {model_path}.",
+            )
+        )
+    except Exception as error:
+        checks.append(
+            ReadyCheck(
+                name="model_path",
+                status="fail",
+                detail=f"Could not resolve model: {error}",
+            )
+        )
+        return ReadyReport(
+            status="fail",
+            provider=config.provider,
+            model=config.model_alias,
+            checks=tuple(checks),
+        )
+
+    if config.provider == "instructor":
+        try:
+            _ensure_local_instructor_server(config)
+            checks.append(
+                ReadyCheck(
+                    name="local_server",
+                    status="pass",
+                    detail=f"Local server is reachable at {config.base_url}.",
+                )
+            )
+        except Exception as error:
+            checks.append(
+                ReadyCheck(
+                    name="local_server",
+                    status="fail",
+                    detail=f"Could not prepare local server: {error}",
+                )
+            )
+            return ReadyReport(
+                status="fail",
+                provider=config.provider,
+                model=config.model_alias,
+                checks=tuple(checks),
+            )
+
+        try:
+            OpenAI = importlib.import_module("openai").OpenAI
+            client = OpenAI(base_url=config.base_url, api_key="meerqat-local")
+            model_name = _resolve_instructor_model_name(
+                config.base_url,
+                config.model_alias,
+            )
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": "Reply with READY."}],
+                temperature=0.0,
+                max_tokens=4,
+            )
+            content = response.choices[0].message.content or ""
+            checks.append(
+                ReadyCheck(
+                    name="inference",
+                    status="pass",
+                    detail=(
+                        f"Received a response from model '{model_name}': "
+                        f"{content.strip() or '[empty content]'}"
+                    ),
+                )
+            )
+        except Exception as error:
+            checks.append(
+                ReadyCheck(
+                    name="inference",
+                    status="fail",
+                    detail=f"Inference probe failed: {error}",
+                )
+            )
+            return ReadyReport(
+                status="fail",
+                provider=config.provider,
+                model=config.model_alias,
+                checks=tuple(checks),
+            )
+    else:
+        try:
+            model_path = get_cached_model_path(
+                spec,
+                cache_dir=config.cache_dir,
+                offline=config.offline,
+            )
+            llm = _build_langchain_llm(model_path, config)
+            response = llm.invoke("Reply with READY.")
+            checks.append(
+                ReadyCheck(
+                    name="inference",
+                    status="pass",
+                    detail=f"Received a response from the local model: {response!s}",
+                )
+            )
+        except Exception as error:
+            checks.append(
+                ReadyCheck(
+                    name="inference",
+                    status="fail",
+                    detail=f"Inference probe failed: {error}",
+                )
+            )
+            return ReadyReport(
+                status="fail",
+                provider=config.provider,
+                model=config.model_alias,
+                checks=tuple(checks),
+            )
+
+    return ReadyReport(
+        status="pass",
+        provider=config.provider,
+        model=config.model_alias,
+        checks=tuple(checks),
+    )
+
+
 def generate_llm_review(
     report: ValidationReport,
     config: LLMConfig,
@@ -641,7 +782,7 @@ def generate_llm_review(
         """Build a structured unavailable-review result."""
         return LLMReviewResult(
             hints=(
-                AdvisoryHint(
+                LLMHint(
                     title="LLM review unavailable",
                     detail=error_message,
                     confidence="low",
@@ -687,11 +828,3 @@ def generate_llm_review(
         )
 
     return result
-
-
-def generate_advisory_hints(
-    report: ValidationReport,
-    config: LLMConfig,
-) -> tuple[AdvisoryHint, ...]:
-    """Return the hint subset of the core model review."""
-    return generate_llm_review(report, config).hints

@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+REPORT_SCHEMA_VERSION = "1.0.0"
+
 
 @dataclass(frozen=True)
-class AdvisoryHint:
-    """Advisory pattern hint produced by the LLM layer."""
+class LLMHint:
+    """Hint produced by the LLM review layer."""
 
     title: str
     detail: str
@@ -47,6 +50,70 @@ class LLMReview:
     def to_dict(self) -> dict[str, Any]:
         """Serialize the review metadata to a dictionary."""
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class ReportProvenance:
+    """Report schema and environment provenance."""
+
+    schema_version: str = REPORT_SCHEMA_VERSION
+    generated_at: str = field(
+        default_factory=lambda: (
+            datetime.now(timezone.utc)
+            .replace(microsecond=0)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
+    )
+    package_version: str = "0+unknown"
+    python_version: str = ""
+    platform: str = ""
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    llm_review_status: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the provenance to a dictionary."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ReadyCheck:
+    """A single readiness check result."""
+
+    name: str
+    status: str
+    detail: str
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the readiness check to a dictionary."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ReadyReport:
+    """Runtime readiness report for MeerQat."""
+
+    status: str
+    model: str
+    provider: str
+    checks: tuple[ReadyCheck, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the readiness report to a dictionary."""
+        statuses = [check.status for check in self.checks]
+        return {
+            "status": self.status,
+            "provider": self.provider,
+            "model": self.model,
+            "checks": [check.to_dict() for check in self.checks],
+            "summary": {
+                "check_count": len(self.checks),
+                "pass_count": statuses.count("pass"),
+                "warn_count": statuses.count("warn"),
+                "fail_count": statuses.count("fail"),
+            },
+        }
 
 
 @dataclass(frozen=True)
@@ -166,18 +233,21 @@ class ValidationReport:
 
     summary: ValidationSummary
     issues: tuple[ValidationIssue, ...]
-    advisory_hints: tuple[AdvisoryHint, ...] = ()
+    llm_hints: tuple[LLMHint, ...] = ()
     llm_findings: tuple[LLMFinding, ...] = ()
     llm_review: LLMReview = field(default_factory=LLMReview)
     dataset: Dataset | None = None
     rule_results: dict[str, Any] = field(default_factory=dict)
+    provenance: ReportProvenance = field(default_factory=ReportProvenance)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the report to a dictionary."""
         return {
+            "schema_version": self.provenance.schema_version,
+            "provenance": self.provenance.to_dict(),
             "summary": self.summary.to_dict(),
             "issues": [issue.to_dict() for issue in self.issues],
-            "advisory_hints": [hint.to_dict() for hint in self.advisory_hints],
+            "llm_hints": [hint.to_dict() for hint in self.llm_hints],
             "llm_findings": [finding.to_dict() for finding in self.llm_findings],
             "llm_review": self.llm_review.to_dict(),
             "dataset": self.dataset.to_dict() if self.dataset is not None else None,
@@ -190,12 +260,15 @@ class BatchValidationReport:
     """Aggregated batch validation results."""
 
     reports: tuple[ValidationReport, ...]
+    provenance: ReportProvenance = field(default_factory=ReportProvenance)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the batch report to a dictionary."""
         total = len(self.reports)
         statuses = [report.summary.status for report in self.reports]
         return {
+            "schema_version": self.provenance.schema_version,
+            "provenance": self.provenance.to_dict(),
             "reports": [report.to_dict() for report in self.reports],
             "summary": {
                 "dataset_count": total,

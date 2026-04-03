@@ -44,3 +44,29 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Run pytest
         run: uv run --frozen pytest
+  llama_cpp_integration:
+    runs-on: ubuntu-24.04
+    env:
+      HF_HOME: ~/.cache/huggingface
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python setup
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the latest version of uv
+        uses: astral-sh/setup-uv@v6
+      - name: Cache Hugging Face models
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: ${{ runner.os }}-meerqat-hf-${{ hashFiles('pyproject.toml') }}
+      - name: Prefetch tinyllama runtime model
+        run: >-
+          uv run --frozen python -c
+          "from meerqat.config import LLMConfig;
+          from meerqat.llm import get_cached_model_path;
+          print(get_cached_model_path(LLMConfig(model_alias='tinyllama').resolved_model()))"
+      - name: Run llama.cpp integration test
+        run: uv run --frozen pytest tests/test_llm_runtime.py -m integration

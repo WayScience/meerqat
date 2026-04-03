@@ -8,8 +8,8 @@ import sys
 from pathlib import Path
 
 from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
-from meerqat.main import batch_validate, validate_dataset, write_reports
-from meerqat.models import BatchValidationReport, ValidationReport
+from meerqat.main import batch_validate, ready, validate_dataset, write_reports
+from meerqat.models import BatchValidationReport, ReadyReport, ValidationReport
 from meerqat.reporting import report_to_markdown
 
 
@@ -24,9 +24,11 @@ def _exit_code(status: str) -> int:
     return 3
 
 
-def _render_stdout(report: ValidationReport | BatchValidationReport) -> str:
+def _render_stdout(
+    report: ValidationReport | BatchValidationReport | ReadyReport,
+) -> str:
     """Render CLI output."""
-    if isinstance(report, BatchValidationReport):
+    if isinstance(report, BatchValidationReport | ReadyReport):
         return json.dumps(report.to_dict(), indent=2)
     return report_to_markdown(report)
 
@@ -107,6 +109,15 @@ def _models_command() -> int:
     return 0
 
 
+def _ready_command(args: argparse.Namespace) -> int:
+    """Run the local-runtime readiness probe."""
+    base_config = load_config(args.config)
+    llm_config = _build_llm_config(args, base_config)
+    report = ready(config=base_config, llm_config=llm_config)
+    print(_render_stdout(report))
+    return 0 if report.status == "pass" else 2
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser."""
     parser = argparse.ArgumentParser(prog="meerqat")
@@ -120,11 +131,6 @@ def build_parser() -> argparse.ArgumentParser:
         target.add_argument("--report-markdown")
         target.add_argument("--report-html")
         target.add_argument("--fail-on-warning", action="store_true")
-        target.add_argument(
-            "--advisory",
-            action="store_true",
-            help="Compatibility flag. LLM review now runs by default.",
-        )
         target.add_argument(
             "--llm-provider",
             choices=("langchain", "instructor"),
@@ -162,6 +168,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     models_parser = subparsers.add_parser("models")
     models_parser.set_defaults(handler=lambda _args: _models_command())
+
+    ready_parser = subparsers.add_parser("ready")
+    ready_parser.add_argument("--config")
+    ready_parser.add_argument(
+        "--llm-provider",
+        choices=("langchain", "instructor"),
+    )
+    ready_parser.add_argument("--llm-model")
+    ready_parser.add_argument("--llm-repo-id")
+    ready_parser.add_argument("--llm-filename")
+    ready_parser.add_argument("--llm-cache-dir")
+    ready_parser.add_argument("--llm-base-url")
+    ready_parser.add_argument("--llm-n-ctx", type=int)
+    ready_parser.add_argument("--llm-threads", type=int)
+    ready_parser.add_argument("--llm-max-tokens", type=int)
+    ready_parser.add_argument("--llm-temperature", type=float)
+    ready_parser.add_argument("--offline", action="store_true")
+    ready_parser.set_defaults(handler=_ready_command)
 
     return parser
 

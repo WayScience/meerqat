@@ -176,9 +176,7 @@ def _discover_metadata_paths(dataset_root: Path) -> tuple[Path, ...]:
             continue
         for extension in METADATA_EXTENSIONS:
             candidates.extend(
-                path
-                for path in search_root.glob(f"*{extension}")
-                if path.is_file()
+                path for path in search_root.glob(f"*{extension}") if path.is_file()
             )
     unique_candidates = sorted(set(candidates))
     preferred = [

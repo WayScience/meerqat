@@ -86,6 +86,9 @@ def report_to_markdown(report: ValidationReport) -> str:
     lines = [
         f"# Meerqat Report: {report.summary.dataset_id}",
         "",
+        f"- Schema version: `{report.provenance.schema_version}`",
+        f"- Generated at: `{report.provenance.generated_at}`",
+        f"- Package version: `{report.provenance.package_version}`",
         f"- Status: `{report.summary.status}`",
         f"- LLM review: `{report.llm_review.status}`",
         f"- Plates: `{report.summary.plate_count}`",
@@ -120,10 +123,10 @@ def report_to_markdown(report: ValidationReport) -> str:
                 f"- `{finding.confidence}` `{finding.category}`{location}: "
                 f"{finding.summary} {finding.detail}"
             )
-    if report.advisory_hints:
+    if report.llm_hints:
         lines.extend(["", "## LLM Hints"])
         lines.extend(["", f"_Note: {LLM_DISCLAIMER}_"])
-        for hint in report.advisory_hints:
+        for hint in report.llm_hints:
             lines.append("")
             lines.append(f"- `{hint.confidence}` {hint.title}: {hint.detail}")
     return "\n".join(lines) + "\n"
@@ -152,7 +155,7 @@ def report_to_html(report: ValidationReport) -> str:
             f"{html.escape(hint.title)}: {html.escape(hint.detail)}"
             "</li>"
         )
-        for hint in report.advisory_hints
+        for hint in report.llm_hints
     )
     finding_items = "".join(
         (
@@ -172,7 +175,7 @@ def report_to_html(report: ValidationReport) -> str:
         if finding_items
         else ""
     )
-    advisory_section = (
+    hint_section = (
         f"<h2>LLM Hints</h2><p><em>{html.escape(LLM_DISCLAIMER)}</em></p>"
         f"<ul>{hint_items}</ul>"
         if hint_items
@@ -181,6 +184,12 @@ def report_to_html(report: ValidationReport) -> str:
     return (
         "<html><head><title>Meerqat Report</title></head><body>"
         f"<h1>Meerqat Report: {html.escape(report.summary.dataset_id)}</h1>"
+        "<p>Schema version: <strong>"
+        f"{html.escape(report.provenance.schema_version)}</strong></p>"
+        "<p>Generated at: <strong>"
+        f"{html.escape(report.provenance.generated_at)}</strong></p>"
+        "<p>Package version: <strong>"
+        f"{html.escape(report.provenance.package_version)}</strong></p>"
         f"<p>Status: <strong>{html.escape(report.summary.status)}</strong></p>"
         f"<p>LLM review: <strong>{html.escape(report.llm_review.status)}</strong></p>"
         "<ul>"
@@ -191,7 +200,7 @@ def report_to_html(report: ValidationReport) -> str:
         f"<h2>Filetree</h2><ul>{filetree_items}</ul>"
         f"<h2>Issues</h2><ul>{issue_items}</ul>"
         f"{finding_section}"
-        f"{advisory_section}"
+        f"{hint_section}"
         "</body></html>"
     )
 

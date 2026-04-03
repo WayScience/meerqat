@@ -34,6 +34,8 @@ def test_validate_dataset_passes(valid_dataset: Path, metadata_csv: Path) -> Non
     assert report.summary.plate_count == 1
     assert report.summary.image_count == 1
     assert report.issues == ()
+    assert report.provenance.schema_version == "1.0.0"
+    assert report.provenance.llm_review_status == "disabled"
 
 
 def test_validate_dataset_discovers_nearby_metadata(
@@ -122,6 +124,8 @@ def test_write_reports_outputs_all_formats(
     )
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "1.0.0"
+    assert payload["provenance"]["package_version"]
     assert payload["summary"]["status"] == "pass"
     assert "# Meerqat Report" in markdown_path.read_text(encoding="utf-8")
     assert "<html>" in html_path.read_text(encoding="utf-8")
@@ -147,6 +151,7 @@ def test_batch_validate_aggregates_reports(
 
     assert len(batch.reports) == EXPECTED_BATCH_REPORTS
     assert {report.summary.status for report in batch.reports} == {"pass", "warn"}
+    assert batch.provenance.schema_version == "1.0.0"
 
 
 def test_llm_config_resolves_preset_and_custom_model() -> None:

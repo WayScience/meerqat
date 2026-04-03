@@ -76,11 +76,21 @@ Run the built-in LLM review with the default local preset:
 meerqat validate /data/CHP-134 --offline
 ```
 
-MeerQat runs the same deterministic validation first, then adds `advisory_hints`, `llm_findings`, and `llm_review` metadata to the finished report. It prefers the Instructor path, will try to start a local `llama.cpp` server at the default local endpoint when needed, and falls back to the direct LangChain `llama.cpp` path otherwise.
+MeerQat runs the same deterministic validation first, then adds `llm_hints`,
+`llm_findings`, and `llm_review` metadata to the finished report. It prefers
+the Instructor path, will
+try to start a local `llama.cpp` server at the default local endpoint when
+needed, and falls back to the direct LangChain `llama.cpp` path otherwise.
 
 By default, the LLM base URL is local: `http://127.0.0.1:8000/v1`. The
 `--offline` flag is opt-in and defaults to disabled unless you pass it or set
 it in config.
+
+Check whether the local runtime is actually ready:
+
+```bash
+meerqat ready
+```
 
 Use an OpenAI-compatible local `llama.cpp` server with Instructor:
 
@@ -107,7 +117,10 @@ report = validate_dataset(
 print(report.summary.status)
 ```
 
-The report includes `advisory_hints`, `llm_findings`, and `llm_review`, but `report.summary.status` still comes from deterministic rules.
+The report includes `llm_hints`, `llm_findings`, and `llm_review`, but
+`report.summary.status` still comes from deterministic rules. JSON reports
+also include a `schema_version` plus `provenance` block with generation time,
+package version, runtime platform, and LLM review metadata.
 
 ## Sample Datasets
 

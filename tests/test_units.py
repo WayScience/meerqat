@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from meerqat import validate_dataset
+from meerqat import ready, validate_dataset
 from meerqat.cli import build_parser, main
 from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
 from meerqat.ingestion import ingest_dataset
@@ -22,14 +22,15 @@ from meerqat.llm import (
     _resolve_instructor_model_name,
     _review_payload,
     _runtime_environment,
-    generate_advisory_hints,
     generate_llm_review,
     get_cached_model_path,
 )
 from meerqat.models import (
-    AdvisoryHint,
     BatchValidationReport,
     LLMFinding,
+    LLMHint,
+    ReadyCheck,
+    ReadyReport,
     ValidationReport,
 )
 from meerqat.reporting import report_to_html, report_to_markdown, write_json_report
@@ -79,6 +80,15 @@ def test_load_config_and_template_resolution(tmp_path: Path) -> None:
     assert template.require_xml is False
 
 
+def test_invalid_config_values_raise_clear_errors() -> None:
+    """Config validation should reject impossible runtime values."""
+    with pytest.raises(ValueError, match=r"llm\.n_ctx must be positive"):
+        LLMConfig(n_ctx=0)
+
+    with pytest.raises(ValueError, match="Unknown assay_template"):
+        ValidationConfig(assay_template="not_a_template")
+
+
 def test_validation_config_repr_is_notebook_friendly() -> None:
     """ValidationConfig should render a compact LLM summary by default."""
     rendered = repr(ValidationConfig())
@@ -124,41 +134,40 @@ def test_ingest_dataset_tracks_empty_and_similar_directories(tmp_path: Path) -> 
     )
 
 
-def test_reporting_helpers_cover_batch_and_advisory(
+def test_reporting_helpers_cover_batch_and_hints(
     valid_dataset: Path, metadata_csv: Path, tmp_path: Path
 ) -> None:
     """Reporting helpers should serialize single and batch reports."""
     report = _report_without_llm(valid_dataset, metadata_csv)
-    advisory_report = ValidationReport(
+    hint_report = ValidationReport(
         summary=report.summary,
         issues=report.issues,
-        advisory_hints=(
-            AdvisoryHint(title="Pattern", detail="Likely plate naming drift."),
-        ),
+        llm_hints=(LLMHint(title="Pattern", detail="Likely plate naming drift."),),
         dataset=report.dataset,
         rule_results=report.rule_results,
     )
-    batch = BatchValidationReport(reports=(advisory_report,))
+    batch = BatchValidationReport(reports=(hint_report,))
     batch_path = tmp_path / "batch.json"
 
-    markdown = report_to_markdown(advisory_report)
-    html = report_to_html(advisory_report)
+    markdown = report_to_markdown(hint_report)
+    html = report_to_html(hint_report)
     write_json_report(batch_path, batch)
 
     assert "## Filetree" in markdown
+    assert "Schema version" in markdown
     assert "LLM Hints" in markdown
     assert "Likely plate naming drift." in html
     assert "File extensions" in html
-    assert (
-        json.loads(batch_path.read_text(encoding="utf-8"))["summary"]["dataset_count"]
-        == 1
-    )
+    payload = json.loads(batch_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "1.0.0"
+    assert payload["provenance"]["generated_at"].endswith("Z")
+    assert payload["summary"]["dataset_count"] == 1
 
 
 def test_llm_helpers_parse_and_skip_when_disabled(
     valid_dataset: Path, metadata_csv: Path
 ) -> None:
-    """LLM helpers should parse structured JSON and no-op when disabled."""
+    """LLM helpers should parse structured JSON and return disabled hints."""
     report = _report_without_llm(valid_dataset, metadata_csv)
 
     hints = _parse_hints(
@@ -168,7 +177,7 @@ def test_llm_helpers_parse_and_skip_when_disabled(
         )
     )
     assert hints[0].confidence == "high"
-    assert generate_advisory_hints(report, LLMConfig(enabled=False)) == ()
+    assert generate_llm_review(report, LLMConfig(enabled=False)).hints == ()
 
 
 def test_llm_review_payload_includes_filetree_summary(
@@ -251,14 +260,14 @@ def test_llm_prefers_instructor_and_falls_back_to_langchain(
     report = _report_without_llm(valid_dataset, metadata_csv)
     calls: list[str] = []
 
-    def fail_instructor(report: object, config: object) -> tuple[AdvisoryHint, ...]:
+    def fail_instructor(report: object, config: object) -> tuple[LLMHint, ...]:
         calls.append("instructor")
         raise ModuleNotFoundError("instructor unavailable")
 
     def ok_langchain(report: object, config: object) -> object:
         calls.append("langchain")
         return types.SimpleNamespace(
-            hints=(AdvisoryHint(title="Fallback", detail="langchain"),),
+            hints=(LLMHint(title="Fallback", detail="langchain"),),
             findings=(),
             provider="langchain",
             model="qwen2.5-3b-instruct",
@@ -297,7 +306,7 @@ def test_llm_attempts_local_server_start_before_instructor(
         lambda report, config: (
             calls.append("instructor"),
             types.SimpleNamespace(
-                hints=(AdvisoryHint(title="Hint", detail="ready"),),
+                hints=(LLMHint(title="Hint", detail="ready"),),
                 findings=(),
                 provider="instructor",
                 model="qwen2.5-3b-instruct",
@@ -332,7 +341,7 @@ def test_llm_retries_instructor_after_connection_failure(
         if calls.count("instructor") == 1:
             raise RuntimeError("Connection error.")
         return types.SimpleNamespace(
-            hints=(AdvisoryHint(title="Hint", detail="retried"),),
+            hints=(LLMHint(title="Hint", detail="retried"),),
             findings=(),
             provider="instructor",
             model="qwen2.5-3b-instruct",
@@ -447,6 +456,8 @@ def test_cli_parser_and_main_dispatch(
     parser = build_parser()
     args = parser.parse_args(["models"])
     assert callable(args.handler)
+    ready_args = parser.parse_args(["ready"])
+    assert callable(ready_args.handler)
 
     report_path = tmp_path / "report.json"
     config_path = tmp_path / "cli-config.yaml"
@@ -482,6 +493,24 @@ def test_cli_parser_and_main_dispatch(
     assert models_code == 0
 
 
+def test_ready_api_uses_runtime_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The public readiness API should delegate to the runtime probe."""
+    monkeypatch.setattr(
+        "meerqat.main.run_ready_checks",
+        lambda llm_config: ReadyReport(
+            status="pass",
+            provider=llm_config.provider,
+            model=llm_config.model_alias,
+            checks=(ReadyCheck(name="probe", status="pass", detail="ok"),),
+        ),
+    )
+
+    report = ready()
+
+    assert report.status == "pass"
+    assert report.checks[0].name == "probe"
+
+
 def test_cli_main_returns_system_error_on_exception(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -494,14 +523,14 @@ def test_cli_main_returns_system_error_on_exception(
     assert main(["models"]) == SYSTEM_ERROR_EXIT
 
 
-def test_validate_dataset_adds_advisory_hints(
+def test_validate_dataset_adds_llm_hints(
     monkeypatch: pytest.MonkeyPatch, valid_dataset: Path, metadata_csv: Path
 ) -> None:
-    """The public API should attach advisory hints when enabled."""
+    """The public API should attach LLM hints when enabled."""
     monkeypatch.setattr(
         "meerqat.main.generate_llm_review",
         lambda report, config: types.SimpleNamespace(
-            hints=(AdvisoryHint(title="Hint", detail=report.summary.status),),
+            hints=(LLMHint(title="Hint", detail=report.summary.status),),
             findings=(
                 LLMFinding(
                     category="filetree",
@@ -518,6 +547,6 @@ def test_validate_dataset_adds_advisory_hints(
 
     report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
 
-    assert report.advisory_hints[0].detail == "pass"
+    assert report.llm_hints[0].detail == "pass"
     assert report.llm_findings[0].category == "filetree"
     assert report.llm_review.status == "completed"

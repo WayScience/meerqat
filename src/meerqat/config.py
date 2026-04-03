@@ -18,6 +18,7 @@ IMAGE_EXTENSIONS = (
     ".ome.tif",
     ".ome.tiff",
 )
+MAX_TEMPERATURE = 2.0
 
 
 @dataclass(frozen=True)
@@ -91,6 +92,34 @@ class LLMConfig:
     temperature: float = 0.2
     base_url: str = "http://127.0.0.1:8000/v1"
 
+    def __post_init__(self) -> None:
+        """Validate core LLM configuration values."""
+        if self.provider not in {"instructor", "langchain"}:
+            raise ValueError("llm.provider must be either 'instructor' or 'langchain'.")
+        if self.model_alias not in DEFAULT_MODEL_SPECS and not (
+            self.repo_id and self.filename
+        ):
+            raise ValueError(
+                "Unknown llm.model_alias. Provide a built-in alias or both "
+                "llm.repo_id and llm.filename."
+            )
+        if bool(self.repo_id) != bool(self.filename):
+            raise ValueError(
+                "Custom model configuration requires both llm.repo_id and llm.filename."
+            )
+        if self.n_ctx <= 0:
+            raise ValueError("llm.n_ctx must be positive.")
+        if self.n_threads <= 0:
+            raise ValueError("llm.n_threads must be positive.")
+        if self.max_tokens <= 0:
+            raise ValueError("llm.max_tokens must be positive.")
+        if not 0 <= self.temperature <= MAX_TEMPERATURE:
+            raise ValueError(
+                f"llm.temperature must be between 0 and {MAX_TEMPERATURE:g}."
+            )
+        if not self.base_url:
+            raise ValueError("llm.base_url must not be empty.")
+
     def resolved_model(self) -> ModelSpec:
         """Resolve the selected or custom model specification."""
         if self.repo_id and self.filename:
@@ -135,6 +164,23 @@ class ValidationConfig:
     metadata_plate_column: str = "plate_id"
     fail_on_warning: bool = False
     llm: LLMConfig = field(default_factory=LLMConfig)
+
+    def __post_init__(self) -> None:
+        """Validate top-level configuration values."""
+        if (
+            self.expected_images_per_plate is not None
+            and self.expected_images_per_plate <= 0
+        ):
+            raise ValueError("expected_images_per_plate must be positive when set.")
+        if self.expected_plate_count is not None and self.expected_plate_count <= 0:
+            raise ValueError("expected_plate_count must be positive when set.")
+        if self.assay_template not in DEFAULT_ASSAY_TEMPLATES:
+            raise ValueError(
+                f"Unknown assay_template '{self.assay_template}'. "
+                f"Expected one of: {', '.join(sorted(DEFAULT_ASSAY_TEMPLATES))}."
+            )
+        if not self.metadata_plate_column:
+            raise ValueError("metadata_plate_column must not be empty.")
 
     def with_cli_overrides(
         self,

@@ -36,7 +36,6 @@ import pathlib
 from tempfile import TemporaryDirectory
 
 from meerqat import ValidationConfig, validate_dataset, write_reports
-
 # -
 
 # ## Validate a Known-Good Dataset
@@ -53,14 +52,12 @@ report = validate_dataset(
 )
 
 report.summary.status
-
 # -
 
 # The expected result is `"pass"`.
 #
 
 report.summary.to_dict()
-
 
 # ## Inspect a Broken Dataset
 #
@@ -75,7 +72,6 @@ broken_report = validate_dataset(
 )
 
 broken_report.summary.status
-
 # -
 
 # The expected result is `"fail"`. That fail status comes from deterministic
@@ -107,7 +103,6 @@ filetree_report = validate_dataset(filetree_root / "dataset")
         if issue.code.startswith("dataset.")
     ],
 }
-
 # -
 
 # The deterministic issues above come from the filetree scan, and the LLM can
@@ -123,7 +118,6 @@ filetree_report = validate_dataset(filetree_root / "dataset")
 validation_config = ValidationConfig()
 validation_config
 
-
 # ## Use the CLI from a Notebook
 #
 # In a notebook, a leading `!` runs a shell command. MeerQat installs a
@@ -136,14 +130,13 @@ validation_config
 # !meerqat validate \
 #   {pathlib.Path("../..") / "tests" / "data" / "xml_mismatch" / "dataset"}
 
-
 # ## LLM Review
 #
 # MeerQat runs the same deterministic validation first and then adds LLM review
 # output. The same happens through the CLI.
 #
 
-# If the local model is running, the report includes `advisory_hints`,
+# If the local model is running, the report includes `llm_hints`,
 # `llm_findings`, and `llm_review` alongside the deterministic issues. If the
 # model runtime is unavailable, MeerQat still records that LLM review failure in
 # the report instead of silently skipping it. LLM summaries can still be wrong,

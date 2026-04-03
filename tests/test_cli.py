@@ -8,6 +8,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from meerqat.cli import main
+from meerqat.models import ReadyCheck, ReadyReport
+
 
 def _cli_env(tmp_path: Path) -> dict[str, str]:
     """Build a subprocess environment for direct CLI execution."""
@@ -123,6 +128,29 @@ def test_cli_models_lists_presets() -> None:
 
     assert result.returncode == 0
     assert "qwen2.5-3b-instruct" in result.stdout
+
+
+def test_cli_ready_renders_json(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The ready command should render readiness results as JSON."""
+    monkeypatch.setattr(
+        "meerqat.cli.ready",
+        lambda config, llm_config: ReadyReport(
+            status="pass",
+            provider=llm_config.provider,
+            model=llm_config.model_alias,
+            checks=(ReadyCheck(name="probe", status="pass", detail="ok"),),
+        ),
+    )
+
+    exit_code = main(["ready"])
+
+    assert exit_code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "pass"
+    assert payload["checks"][0]["name"] == "probe"
 
 
 def _write_test_config(tmp_path: Path) -> Path:
