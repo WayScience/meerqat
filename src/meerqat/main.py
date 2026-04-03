@@ -64,6 +64,12 @@ def validate_dataset(
     )
     report = validate_dataset_model(dataset, active_config)
     llm_review = generate_llm_review(report, active_config.llm)
+    llm_review_obj = LLMReview(
+        status=llm_review.status,
+        provider=llm_review.provider,
+        model=llm_review.model,
+        error=llm_review.error,
+    )
     return ValidationReport(
         summary=report.summary,
         issues=report.issues,
@@ -71,20 +77,8 @@ def validate_dataset(
         rule_results=report.rule_results,
         llm_hints=llm_review.hints,
         llm_findings=llm_review.findings,
-        llm_review=LLMReview(
-            status=llm_review.status,
-            provider=llm_review.provider,
-            model=llm_review.model,
-            error=llm_review.error,
-        ),
-        provenance=_build_provenance(
-            LLMReview(
-                status=llm_review.status,
-                provider=llm_review.provider,
-                model=llm_review.model,
-                error=llm_review.error,
-            )
-        ),
+        llm_review=llm_review_obj,
+        provenance=_build_provenance(llm_review_obj),
     )
 
 

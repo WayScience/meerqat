@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
-from xml.etree import ElementTree
 
+import defusedxml.ElementTree as ET
 import pandas as pd
 
 from meerqat.config import IMAGE_EXTENSIONS, ValidationConfig
@@ -57,7 +57,7 @@ def _extract_xml_plate_id(xml_path: Path | None) -> str | None:
     """Extract a plate identifier from XML content when possible."""
     if xml_path is None:
         return None
-    root = ElementTree.parse(xml_path).getroot()
+    root = ET.parse(xml_path).getroot()
     candidates: list[str] = []
     for key in ("PlateID", "PlateName", "Name", "ID", "id", "name"):
         value = root.attrib.get(key)
@@ -106,35 +106,39 @@ def _image_modalities(image_files: tuple[Path, ...]) -> tuple[str, ...]:
 
 def _build_filetree_summary(dataset_root: Path) -> FiletreeSummary:
     """Summarize dataset-wide filetree patterns."""
-    paths = tuple(dataset_root.rglob("*"))
-    directory_children = Counter(str(path.parent.resolve()) for path in paths)
+    directory_children: Counter[str] = Counter()
+    directories: list[Path] = []
+    file_extensions: Counter[str] = Counter()
+    similarity_buckets: dict[tuple[int, str], list[Path]] = defaultdict(list)
+
+    for path in dataset_root.rglob("*"):
+        resolved = path.resolve()
+        directory_children[str(resolved.parent)] += 1
+        if path.is_dir():
+            directories.append(resolved)
+            relative = resolved.relative_to(dataset_root)
+            bucket_key = (len(relative.parts), resolved.name.lower()[:4])
+            similarity_buckets[bucket_key].append(resolved)
+        elif path.is_file() and path.suffix:
+            file_extensions[path.suffix] += 1
+
     empty_directories = tuple(
-        sorted(
-            str(path.resolve())
-            for path in paths
-            if path.is_dir() and directory_children[str(path.resolve())] == 0
-        )
+        sorted(str(path) for path in directories if directory_children[str(path)] == 0)
     )
-    file_extensions = dict(
-        sorted(
-            Counter(
-                path.suffix for path in paths if path.is_file() and path.suffix
-            ).items()
-        )
-    )
-    directories = tuple(sorted(path.resolve() for path in paths if path.is_dir()))
     similar_pairs: list[tuple[str, str]] = []
-    for index, left in enumerate(directories):
-        left_text = str(left.relative_to(dataset_root))
-        for right in directories[index + 1 :]:
-            right_text = str(right.relative_to(dataset_root))
-            similarity = SequenceMatcher(None, left_text, right_text).ratio()
-            if similarity >= SIMILAR_DIRECTORY_THRESHOLD:
-                similar_pairs.append((str(left), str(right)))
+    for bucket in similarity_buckets.values():
+        sorted_bucket = sorted(bucket)
+        for index, left in enumerate(sorted_bucket):
+            left_text = str(left.relative_to(dataset_root))
+            for right in sorted_bucket[index + 1 :]:
+                right_text = str(right.relative_to(dataset_root))
+                similarity = SequenceMatcher(None, left_text, right_text).ratio()
+                if similarity >= SIMILAR_DIRECTORY_THRESHOLD:
+                    similar_pairs.append((str(left), str(right)))
     return FiletreeSummary(
-        file_extensions=file_extensions,
+        file_extensions=dict(sorted(file_extensions.items())),
         empty_directories=empty_directories,
-        similarly_named_directories=tuple(similar_pairs),
+        similarly_named_directories=tuple(sorted(similar_pairs)),
     )
 
 

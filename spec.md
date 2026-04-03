@@ -223,42 +223,31 @@ ______________________________________________________________________
 
 ### Dataset
 
+```python
 class Dataset:
-
-```
-dataset\_id: str | None
-
-plates: list\[Plate\]
-
-metadata\_records: list\[MetadataRecord\]
+    dataset_id: str | None
+    plates: list[Plate]
+    metadata_records: list[MetadataRecord]
 ```
 
 ### Plate
 
+```python
 class Plate:
-
-```
-folder\_name: str
-
-normalized\_plate\_id: str | None
-
-xml\_plate\_id: str | None
-
-metadata\_plate\_id: str | None
+    folder_name: str
+    normalized_plate_id: str | None
+    xml_plate_id: str | None
+    metadata_plate_id: str | None
 ```
 
 ### ValidationIssue
 
+```python
 class ValidationIssue:
-
-```
-rule\_id: str
-
-severity: str
-
-message: str
-
-entity\_id: str | None
+    rule_id: str
+    severity: str
+    message: str
+    entity_id: str | None
 ```
 
 ______________________________________________________________________
@@ -267,27 +256,23 @@ ______________________________________________________________________
 
 Example YAML:
 
+```yaml
 dataset:
-
-dataset_id: CHP-134
+  dataset_id: CHP-134
 
 plate_naming:
-
-regex: "^BR[0-9]+$"
+  regex: "^BR[0-9]+$"
 
 required_files:
-
-\- "Images/Index.xml"
+  - "Images/Index.xml"
 
 expectations:
-
-expected_plate_count: 27
-
-expected_image_sets_per_plate: 3456
+  expected_plate_count: 27
+  expected_image_sets_per_plate: 3456
 
 metadata:
-
-plate_id_column: PlateID
+  plate_id_column: PlateID
+```
 
 ______________________________________________________________________
 
@@ -363,7 +348,6 @@ ______________________________________________________________________
 
 ## Future Work
 
-- OME-Zarr support
 - Image-level QC
 - Visualization dashboards
 - CI integration

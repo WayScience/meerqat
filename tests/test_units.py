@@ -47,6 +47,11 @@ def _report_without_llm(valid_dataset: Path, metadata_csv: Path) -> ValidationRe
     )
 
 
+def _raise_exc(error: BaseException) -> None:
+    """Raise a provided exception for monkeypatch helpers."""
+    raise error
+
+
 def test_load_config_and_template_resolution(tmp_path: Path) -> None:
     """Config loading should hydrate nested LLM config and template overrides."""
     config_path = tmp_path / "config.yaml"
@@ -367,17 +372,15 @@ def test_llm_returns_failed_review_when_all_paths_fail(
 
     monkeypatch.setattr(
         "meerqat.llm._ensure_local_instructor_server",
-        lambda config: (_ for _ in ()).throw(RuntimeError("startup failed")),
+        lambda config: _raise_exc(RuntimeError("startup failed")),
     )
     monkeypatch.setattr(
         "meerqat.llm._invoke_instructor",
-        lambda report, config: (_ for _ in ()).throw(
-            ModuleNotFoundError("instructor missing")
-        ),
+        lambda report, config: _raise_exc(ModuleNotFoundError("instructor missing")),
     )
     monkeypatch.setattr(
         "meerqat.llm._invoke_langchain",
-        lambda report, config: (_ for _ in ()).throw(
+        lambda report, config: _raise_exc(
             ModuleNotFoundError("langchain_core missing")
         ),
     )

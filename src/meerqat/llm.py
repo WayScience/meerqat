@@ -32,6 +32,7 @@ from meerqat.models import (
 
 _SERVER_PROCESSES: dict[str, subprocess.Popen[str]] = {}
 HTTP_SERVER_ERROR_STATUS = 500
+HTTP_SCHEMES = {"http", "https"}
 MACOS_CPU_RUNTIME_DIRNAME = "llama_cpp_macos_cpu"
 SERVER_RUNTIME_MODULES = (
     "uvicorn",
@@ -146,10 +147,17 @@ def _write_macos_metal_stub(runtime_lib_dir: Path) -> None:
         encoding="utf-8",
     )
     output_path = runtime_lib_dir / "libggml-metal.0.dylib"
+    compiler = shutil.which("cc") or shutil.which("clang")
+    if compiler is None:
+        raise RuntimeError(
+            "Failed to build the macOS CPU-only llama.cpp runtime shim because "
+            "no C compiler was found. Install the macOS command line tools and "
+            "try again."
+        )
     try:
         subprocess.run(
             [
-                "cc",
+                compiler,
                 "-dynamiclib",
                 "-o",
                 str(output_path),
@@ -161,9 +169,14 @@ def _write_macos_metal_stub(runtime_lib_dir: Path) -> None:
             check=True,
             text=True,
         )
-    except (OSError, subprocess.CalledProcessError) as error:
+    except (FileNotFoundError, subprocess.CalledProcessError) as error:
+        stderr = getattr(error, "stderr", "") or ""
+        stdout = getattr(error, "stdout", "") or ""
+        details = "\n".join(part for part in (stderr.strip(), stdout.strip()) if part)
         raise RuntimeError(
-            "Failed to build the macOS CPU-only llama.cpp runtime shim."
+            "Failed to build the macOS CPU-only llama.cpp runtime shim with "
+            f"compiler '{compiler}'. Install the macOS command line tools and "
+            f"try again. {details or error}"
         ) from error
     for alias in ("libggml-metal.dylib", "libggml-metal.0.9.8.dylib"):
         alias_path = runtime_lib_dir / alias
@@ -231,6 +244,17 @@ def _models_url(base_url: str) -> str:
     )
 
 
+def _validated_models_url(base_url: str) -> str:
+    """Return a validated models URL for HTTP(S) local or remote endpoints."""
+    models_url = _models_url(base_url)
+    scheme = urllib_parse.urlsplit(models_url).scheme.lower()
+    if scheme not in HTTP_SCHEMES:
+        raise ValueError(
+            f"Unsupported LLM endpoint scheme '{scheme}'. Use http or https."
+        )
+    return models_url
+
+
 def _is_local_base_url(base_url: str) -> bool:
     """Return whether the configured endpoint points at localhost."""
     hostname = urllib_parse.urlsplit(base_url).hostname
@@ -240,7 +264,10 @@ def _is_local_base_url(base_url: str) -> bool:
 def _server_is_ready(base_url: str) -> bool:
     """Check whether an OpenAI-compatible endpoint is reachable."""
     try:
-        with urllib_request.urlopen(_models_url(base_url), timeout=1) as response:
+        with urllib_request.urlopen(
+            _validated_models_url(base_url),
+            timeout=1,
+        ) as response:
             return response.status < HTTP_SERVER_ERROR_STATUS
     except (urllib_error.URLError, TimeoutError, ValueError):
         return False
@@ -248,7 +275,7 @@ def _server_is_ready(base_url: str) -> bool:
 
 def _fetch_models_payload(base_url: str) -> dict[str, Any]:
     """Fetch the OpenAI-compatible models payload."""
-    with urllib_request.urlopen(_models_url(base_url), timeout=2) as response:
+    with urllib_request.urlopen(_validated_models_url(base_url), timeout=2) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -299,16 +326,24 @@ def _cleanup_server_processes() -> None:
 atexit.register(_cleanup_server_processes)
 
 
-def _wait_for_server(base_url: str, process: subprocess.Popen[str]) -> None:
+def _wait_for_server(
+    base_url: str,
+    process: subprocess.Popen[str],
+    *,
+    timeout_seconds: float,
+) -> None:
     """Wait for a spawned local server to become reachable."""
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + timeout_seconds
     while time.monotonic() < deadline:
         if _server_is_ready(base_url):
             return
         if process.poll() is not None:
             raise RuntimeError("llama.cpp server exited before becoming ready.")
         time.sleep(0.5)
-    raise RuntimeError("Timed out waiting for the local llama.cpp server.")
+    raise RuntimeError(
+        "Timed out waiting for the local llama.cpp server after "
+        f"{timeout_seconds:g} seconds."
+    )
 
 
 def _ensure_server_runtime_dependencies() -> None:
@@ -337,7 +372,11 @@ def _ensure_local_instructor_server(config: LLMConfig) -> None:
 
     existing_process = _SERVER_PROCESSES.get(config.base_url)
     if existing_process is not None and existing_process.poll() is None:
-        _wait_for_server(config.base_url, existing_process)
+        _wait_for_server(
+            config.base_url,
+            existing_process,
+            timeout_seconds=config.server_startup_timeout,
+        )
         return
 
     model_path = get_cached_model_path(
@@ -370,7 +409,11 @@ def _ensure_local_instructor_server(config: LLMConfig) -> None:
         text=True,
     )
     _SERVER_PROCESSES[config.base_url] = process
-    _wait_for_server(config.base_url, process)
+    _wait_for_server(
+        config.base_url,
+        process,
+        timeout_seconds=config.server_startup_timeout,
+    )
 
 
 def get_cached_model_path(

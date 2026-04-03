@@ -123,14 +123,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="meerqat")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    def add_common_flags(target: argparse.ArgumentParser) -> None:
-        target.add_argument("--metadata", action="append")
+    def add_shared_flags(target: argparse.ArgumentParser) -> None:
         target.add_argument("--config")
-        target.add_argument("--dataset-id")
-        target.add_argument("--report-json")
-        target.add_argument("--report-markdown")
-        target.add_argument("--report-html")
-        target.add_argument("--fail-on-warning", action="store_true")
+
+    def add_llm_flags(target: argparse.ArgumentParser) -> None:
         target.add_argument(
             "--llm-provider",
             choices=("langchain", "instructor"),
@@ -156,35 +152,34 @@ def build_parser() -> argparse.ArgumentParser:
             ),
         )
 
+    def add_validation_flags(target: argparse.ArgumentParser) -> None:
+        target.add_argument("--metadata", action="append")
+        target.add_argument("--dataset-id")
+        target.add_argument("--report-json")
+        target.add_argument("--report-markdown")
+        target.add_argument("--report-html")
+        target.add_argument("--fail-on-warning", action="store_true")
+
     validate_parser = subparsers.add_parser("validate")
     validate_parser.add_argument("dataset")
-    add_common_flags(validate_parser)
+    add_shared_flags(validate_parser)
+    add_validation_flags(validate_parser)
+    add_llm_flags(validate_parser)
     validate_parser.set_defaults(handler=_validate_command)
 
     batch_parser = subparsers.add_parser("batch-validate")
     batch_parser.add_argument("datasets", nargs="+")
-    add_common_flags(batch_parser)
+    add_shared_flags(batch_parser)
+    add_validation_flags(batch_parser)
+    add_llm_flags(batch_parser)
     batch_parser.set_defaults(handler=_batch_validate_command)
 
     models_parser = subparsers.add_parser("models")
     models_parser.set_defaults(handler=lambda _args: _models_command())
 
     ready_parser = subparsers.add_parser("ready")
-    ready_parser.add_argument("--config")
-    ready_parser.add_argument(
-        "--llm-provider",
-        choices=("langchain", "instructor"),
-    )
-    ready_parser.add_argument("--llm-model")
-    ready_parser.add_argument("--llm-repo-id")
-    ready_parser.add_argument("--llm-filename")
-    ready_parser.add_argument("--llm-cache-dir")
-    ready_parser.add_argument("--llm-base-url")
-    ready_parser.add_argument("--llm-n-ctx", type=int)
-    ready_parser.add_argument("--llm-threads", type=int)
-    ready_parser.add_argument("--llm-max-tokens", type=int)
-    ready_parser.add_argument("--llm-temperature", type=float)
-    ready_parser.add_argument("--offline", action="store_true")
+    add_shared_flags(ready_parser)
+    add_llm_flags(ready_parser)
     ready_parser.set_defaults(handler=_ready_command)
 
     return parser

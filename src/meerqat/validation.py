@@ -5,7 +5,8 @@ from __future__ import annotations
 import re
 from collections import Counter
 from pathlib import Path
-from xml.etree import ElementTree
+
+import defusedxml.ElementTree as ET
 
 from meerqat.config import ValidationConfig
 from meerqat.models import Dataset, ValidationIssue, ValidationReport, ValidationSummary
@@ -167,8 +168,8 @@ def validate_dataset_model(  # noqa: C901, PLR0912
 
         if plate.xml_path is not None:
             try:
-                ElementTree.parse(plate.xml_path)
-            except ElementTree.ParseError:
+                ET.parse(plate.xml_path)
+            except ET.ParseError:
                 issues.append(
                     _issue(
                         "plate.invalid_xml",

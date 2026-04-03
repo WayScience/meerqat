@@ -6,6 +6,14 @@ from pathlib import Path
 
 import pytest
 
+from meerqat import LLMConfig, ValidationConfig
+
+
+@pytest.fixture
+def config_without_llm() -> ValidationConfig:
+    """Return a validation config that skips the runtime review."""
+    return ValidationConfig(llm=LLMConfig(enabled=False))
+
 
 @pytest.fixture
 def valid_dataset(tmp_path: Path) -> Path:

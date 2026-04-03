@@ -91,6 +91,7 @@ class LLMConfig:
     max_tokens: int = 256
     temperature: float = 0.2
     base_url: str = "http://127.0.0.1:8000/v1"
+    server_startup_timeout: float = 30.0
 
     def __post_init__(self) -> None:
         """Validate core LLM configuration values."""
@@ -117,6 +118,8 @@ class LLMConfig:
             raise ValueError(
                 f"llm.temperature must be between 0 and {MAX_TEMPERATURE:g}."
             )
+        if self.server_startup_timeout <= 0:
+            raise ValueError("llm.server_startup_timeout must be positive.")
         if not self.base_url:
             raise ValueError("llm.base_url must not be empty.")
 
@@ -142,6 +145,7 @@ class LLMConfig:
             "model": self.model_alias,
             "base_url": self.base_url,
             "n_ctx": self.resolved_n_ctx(),
+            "server_startup_timeout": self.server_startup_timeout,
         }
 
     def __repr__(self) -> str:

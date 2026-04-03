@@ -17,17 +17,16 @@ from meerqat.main import write_reports
 EXPECTED_BATCH_REPORTS = 2
 
 
-def _without_llm() -> ValidationConfig:
-    """Return a validation config that skips the runtime review."""
-    return ValidationConfig(llm=LLMConfig(enabled=False))
-
-
-def test_validate_dataset_passes(valid_dataset: Path, metadata_csv: Path) -> None:
+def test_validate_dataset_passes(
+    valid_dataset: Path,
+    metadata_csv: Path,
+    config_without_llm: ValidationConfig,
+) -> None:
     """A complete dataset should pass deterministic validation."""
     report = validate_dataset(
         valid_dataset,
         metadata_paths=[metadata_csv],
-        config=_without_llm(),
+        config=config_without_llm,
     )
 
     assert report.summary.status == "pass"
@@ -39,10 +38,12 @@ def test_validate_dataset_passes(valid_dataset: Path, metadata_csv: Path) -> Non
 
 
 def test_validate_dataset_discovers_nearby_metadata(
-    valid_dataset: Path, metadata_csv: Path
+    valid_dataset: Path,
+    metadata_csv: Path,
+    config_without_llm: ValidationConfig,
 ) -> None:
     """Validation should auto-discover metadata when none is provided."""
-    report = validate_dataset(valid_dataset)
+    report = validate_dataset(valid_dataset, config=config_without_llm)
 
     assert report.summary.status == "pass"
     assert report.summary.metadata_record_count == 1
@@ -104,13 +105,16 @@ def test_validate_dataset_detects_filetree_risks(tmp_path: Path) -> None:
 
 
 def test_write_reports_outputs_all_formats(
-    valid_dataset: Path, metadata_csv: Path, tmp_path: Path
+    valid_dataset: Path,
+    metadata_csv: Path,
+    tmp_path: Path,
+    config_without_llm: ValidationConfig,
 ) -> None:
     """All report writers should emit files."""
     report = validate_dataset(
         valid_dataset,
         metadata_paths=[metadata_csv],
-        config=_without_llm(),
+        config=config_without_llm,
     )
     json_path = tmp_path / "report.json"
     markdown_path = tmp_path / "report.md"
@@ -132,7 +136,10 @@ def test_write_reports_outputs_all_formats(
 
 
 def test_batch_validate_aggregates_reports(
-    valid_dataset: Path, metadata_csv: Path, tmp_path: Path
+    valid_dataset: Path,
+    metadata_csv: Path,
+    tmp_path: Path,
+    config_without_llm: ValidationConfig,
 ) -> None:
     """Batch validation should preserve per-dataset results."""
     second_dataset = tmp_path / "second_dataset"
@@ -146,7 +153,7 @@ def test_batch_validate_aggregates_reports(
     batch = batch_validate(
         [valid_dataset, second_dataset],
         metadata_paths=[metadata_csv],
-        config=_without_llm(),
+        config=config_without_llm,
     )
 
     assert len(batch.reports) == EXPECTED_BATCH_REPORTS

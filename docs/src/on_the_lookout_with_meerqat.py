@@ -36,6 +36,11 @@ import pathlib
 from tempfile import TemporaryDirectory
 
 from meerqat import ValidationConfig, validate_dataset, write_reports
+
+if "__file__" in globals():
+    repo_root = pathlib.Path(__file__).resolve().parents[2]
+else:
+    repo_root = pathlib.Path("../..").resolve()
 # -
 
 # ## Validate a Known-Good Dataset
@@ -46,7 +51,7 @@ from meerqat import ValidationConfig, validate_dataset, write_reports
 #
 
 # +
-data_root = pathlib.Path("../..") / "tests" / "data" / "valid_minimal"
+data_root = repo_root / "tests" / "data" / "valid_minimal"
 report = validate_dataset(
     data_root / "dataset",
 )
@@ -66,7 +71,7 @@ report.summary.to_dict()
 #
 
 # +
-broken_root = pathlib.Path("../..") / "tests" / "data" / "xml_mismatch"
+broken_root = repo_root / "tests" / "data" / "xml_mismatch"
 broken_report = validate_dataset(
     broken_root / "dataset",
 )
@@ -91,7 +96,7 @@ broken_report.summary.status
 #
 
 # +
-filetree_root = pathlib.Path("../..") / "tests" / "data" / "filetree_risks"
+filetree_root = repo_root / "tests" / "data" / "filetree_risks"
 filetree_report = validate_dataset(filetree_root / "dataset")
 
 {
@@ -124,11 +129,11 @@ validation_config
 # `meerqat` entrypoint, so the CLI stays simple.
 #
 # `!meerqat validate`
-# `{pathlib.Path("../..") / "tests" / "data" / "xml_mismatch" / "dataset"}`
+# `{repo_root / "tests" / "data" / "xml_mismatch" / "dataset"}`
 #
 
 # !meerqat validate \
-#   {pathlib.Path("../..") / "tests" / "data" / "xml_mismatch" / "dataset"}
+#   {repo_root / "tests" / "data" / "xml_mismatch" / "dataset"}
 
 # ## LLM Review
 #

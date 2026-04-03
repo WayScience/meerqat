@@ -8,10 +8,13 @@ If you are stuck, please feel free to ask any questions or ask for help.
 
 ## Code of conduct
 
-This project is governed by our [code of conduct](code_of_conduct.md). By participating, you are expected to uphold this code.
+This project is governed by our [code of conduct](CODE_OF_CONDUCT.md). By
+participating, you are expected to uphold this code.
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to community leaders responsible for enforcement.
-Please open a [new security advisory notice](https://github.com/wayscience/meerqat/security/advisories/new) (using defaults or "n/a" where unable to fill in the form) to privately notify us of any incidents of this nature.
+Please open a [new security advisory notice](https://github.com/WayScience/meerqat/security/advisories/new)
+(using defaults or "n/a" where unable to fill in the form) to privately notify
+us of any incidents of this nature.
 
 ## Development
 
@@ -60,8 +63,6 @@ Specifically, there are several ways to suggest or make changes to this reposito
 1. Open a GitHub issue: https://github.com/wayscience/meerqat/issues
 1. Create a pull request from a forked branch of the repository
 
-### Creating a pull request
-
 ### Pull requests
 
 After you’ve decided to contribute code and have written it up, please file a pull request.
@@ -88,7 +89,9 @@ We use [`setuptools-scm`](https://github.com/pypa/setuptools-scm) to help versio
 Configuration for versioning is found within the `pyproject.toml` file.
 All builds for packages include dynamic version data to help label distinct versions of the software.
 `setuptools-scm` uses `git` tags to help distinguish version data.
-We also use the `_version.py` file as a place to persist the version data for occaissions where the `git` history is unavailable or unwanted (this file is only present in package builds).
+We also use the `_version.py` file as a place to persist the version data for
+occasions where the `git` history is unavailable or unwanted (this file is only
+present in package builds).
 Versioning for the project is intended to align with GitHub Releases which provide `git` tag capabilities.
 
 ### Releases

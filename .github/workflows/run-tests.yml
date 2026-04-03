@@ -61,7 +61,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/huggingface
-          key: ${{ runner.os }}-meerqat-hf-${{ hashFiles('pyproject.toml') }}
+          key: ${{ runner.os }}-meerqat-hf-${{ hashFiles('pyproject.toml', 'src/meerqat/config.py') }}
       - name: Prefetch tinyllama runtime model
         run: >-
           uv run --frozen python -c

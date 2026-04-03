@@ -1705,9 +1705,9 @@ wheels = [
 
 [[package]]
 name = "meerqat"
-version = "0.0.1"
 source = { editable = "." }
 dependencies = [
+    { name = "defusedxml" },
     { name = "fastapi" },
     { name = "huggingface-hub" },
     { name = "instructor" },
@@ -1746,6 +1746,7 @@ notebooks = [
 
 [package.metadata]
 requires-dist = [
+    { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "fastapi", specifier = ">=0.115" },
     { name = "huggingface-hub", specifier = ">=0.30.2" },
     { name = "instructor", specifier = ">=1.7.9" },

@@ -11,7 +11,7 @@ authors:
   - given-names: Dave
     family-names: Bunten
     orcid: "https://orcid.org/0000-0001-6041-3665"
-repository-code: "https://github.com/wayscience/meerqat"
+repository-code: "https://github.com/WayScience/meerqat"
 abstract: >-
   Validate bioimaging datasets by detecting missing files, metadata gaps, and structural inconsistencies early.
 keywords:

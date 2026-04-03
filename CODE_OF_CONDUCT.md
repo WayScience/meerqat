@@ -59,9 +59,12 @@ representative at an online or offline event.
 ## Enforcement
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to community leaders responsible for enforcement.
-Please reach out to the maintainers of this repository by using their GitHub profile email address contact information to privately notify us of any incidents of this nature.
-All complaints will be reviewed and investigated promptly and fairly.
+reported to community leaders responsible for enforcement through the private
+GitHub Security Advisory form for this repository:
+https://github.com/WayScience/meerqat/security/advisories/new
+Please use that form as the single reporting channel for incidents of this
+nature. Reports will be handled confidentially and promptly, and all complaints
+will be reviewed and investigated fairly.
 
 All community leaders are obligated to respect the privacy and security of the
 reporter of any incident.

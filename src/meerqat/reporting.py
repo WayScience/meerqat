@@ -83,8 +83,9 @@ def _html_filetree_items(report: ValidationReport) -> str:
 
 def report_to_markdown(report: ValidationReport) -> str:
     """Render a report as Markdown."""
+    dataset_title = report.summary.dataset_id or "Unknown"
     lines = [
-        f"# Meerqat Report: {report.summary.dataset_id}",
+        f"# Meerqat Report: {dataset_title}",
         "",
         f"- Schema version: `{report.provenance.schema_version}`",
         f"- Generated at: `{report.provenance.generated_at}`",

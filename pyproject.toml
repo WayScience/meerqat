@@ -4,7 +4,6 @@ requires = [ "setuptools>=64", "setuptools-scm>=8" ]
 
 [project]
 name = "meerqat"
-version = "0.0.1"
 description = "Validate bioimaging datasets by detecting missing files, metadata gaps, and structural inconsistencies early."
 readme = "README.md"
 authors = [
@@ -18,7 +17,9 @@ classifiers = [
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
 ]
+dynamic = [ "version" ]
 dependencies = [
+  "defusedxml>=0.7.1",
   "fastapi>=0.115",
   "huggingface-hub>=0.30.2",
   "instructor>=1.7.9",
