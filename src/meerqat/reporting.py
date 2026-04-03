@@ -8,6 +8,11 @@ from pathlib import Path
 
 from meerqat.models import BatchValidationReport, ValidationReport
 
+LLM_DISCLAIMER = (
+    "LLM-derived hints and findings can be wrong. Verify them against the "
+    "underlying dataset before acting on them."
+)
+
 
 def _markdown_filetree_lines(report: ValidationReport) -> list[str]:
     """Render the filetree section for Markdown reports."""
@@ -107,6 +112,7 @@ def report_to_markdown(report: ValidationReport) -> str:
             lines.append(f"  Remediation: {issue.remediation}")
     if report.llm_findings:
         lines.extend(["", "## LLM Findings"])
+        lines.extend(["", f"_Note: {LLM_DISCLAIMER}_"])
         for finding in report.llm_findings:
             location = f" ({finding.plate_id})" if finding.plate_id else ""
             lines.append("")
@@ -116,6 +122,7 @@ def report_to_markdown(report: ValidationReport) -> str:
             )
     if report.advisory_hints:
         lines.extend(["", "## LLM Hints"])
+        lines.extend(["", f"_Note: {LLM_DISCLAIMER}_"])
         for hint in report.advisory_hints:
             lines.append("")
             lines.append(f"- `{hint.confidence}` {hint.title}: {hint.detail}")
@@ -158,9 +165,19 @@ def report_to_html(report: ValidationReport) -> str:
         for finding in report.llm_findings
     )
     finding_section = (
-        f"<h2>LLM Findings</h2><ul>{finding_items}</ul>" if finding_items else ""
+        (
+            f"<h2>LLM Findings</h2><p><em>{html.escape(LLM_DISCLAIMER)}</em></p>"
+            f"<ul>{finding_items}</ul>"
+        )
+        if finding_items
+        else ""
     )
-    advisory_section = f"<h2>LLM Hints</h2><ul>{hint_items}</ul>" if hint_items else ""
+    advisory_section = (
+        f"<h2>LLM Hints</h2><p><em>{html.escape(LLM_DISCLAIMER)}</em></p>"
+        f"<ul>{hint_items}</ul>"
+        if hint_items
+        else ""
+    )
     return (
         "<html><head><title>Meerqat Report</title></head><body>"
         f"<h1>Meerqat Report: {html.escape(report.summary.dataset_id)}</h1>"

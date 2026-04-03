@@ -113,7 +113,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     def add_common_flags(target: argparse.ArgumentParser) -> None:
-        target.add_argument("--metadata", action="append", default=[])
+        target.add_argument("--metadata", action="append")
         target.add_argument("--config")
         target.add_argument("--dataset-id")
         target.add_argument("--report-json")

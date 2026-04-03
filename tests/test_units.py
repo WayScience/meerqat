@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 import types
 from pathlib import Path
@@ -15,6 +16,8 @@ from meerqat.cli import build_parser, main
 from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
 from meerqat.ingestion import ingest_dataset
 from meerqat.llm import (
+    HF_HUB_DISABLE_PROGRESS_ENV,
+    TQDM_IPROGRESS_WARNING,
     _parse_hints,
     _resolve_instructor_model_name,
     _review_payload,
@@ -74,6 +77,15 @@ def test_load_config_and_template_resolution(tmp_path: Path) -> None:
     )
     assert template.required_files == ("manifest.txt",)
     assert template.require_xml is False
+
+
+def test_validation_config_repr_is_notebook_friendly() -> None:
+    """ValidationConfig should render a compact LLM summary by default."""
+    rendered = repr(ValidationConfig())
+
+    assert '"provider": "instructor"' in rendered
+    assert '"model": "tinyllama"' in rendered
+    assert '"base_url": "http://127.0.0.1:8000/v1"' in rendered
 
 
 def test_ingest_dataset_handles_root_plate_and_missing_metadata(
@@ -389,13 +401,30 @@ def test_get_cached_model_path_delegates_to_huggingface(
 ) -> None:
     """Model downloads should delegate to the Hugging Face helper."""
     seen: dict[str, object] = {}
+    progress_calls: list[str | None] = []
+    filter_calls: list[dict[str, object]] = []
 
     def fake_download(**kwargs: object) -> str:
         seen.update(kwargs)
         return "/tmp/model.gguf"
 
-    fake_module = types.SimpleNamespace(hf_hub_download=fake_download)
+    fake_module = types.SimpleNamespace(
+        hf_hub_download=fake_download,
+        utils=types.SimpleNamespace(
+            disable_progress_bars=lambda name=None: progress_calls.append(name)
+        ),
+    )
     monkeypatch.setitem(sys.modules, "huggingface_hub", fake_module)
+    monkeypatch.setitem(
+        sys.modules,
+        "tqdm.std",
+        types.SimpleNamespace(TqdmWarning=UserWarning),
+    )
+    monkeypatch.delenv(HF_HUB_DISABLE_PROGRESS_ENV, raising=False)
+    monkeypatch.setattr(
+        "warnings.filterwarnings",
+        lambda *args, **kwargs: filter_calls.append(kwargs),
+    )
     path = get_cached_model_path(
         LLMConfig(model_alias="tinyllama").resolved_model(),
         cache_dir=Path("/tmp/cache"),
@@ -405,6 +434,10 @@ def test_get_cached_model_path_delegates_to_huggingface(
     assert path == "/tmp/model.gguf"
     assert seen["repo_id"] == "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF"
     assert seen["local_files_only"] is True
+    assert progress_calls == [None]
+    assert os.environ[HF_HUB_DISABLE_PROGRESS_ENV] == "1"
+    assert filter_calls[0]["category"] is UserWarning
+    assert TQDM_IPROGRESS_WARNING in str(filter_calls[0]["message"])
 
 
 def test_cli_parser_and_main_dispatch(

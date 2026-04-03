@@ -78,3 +78,18 @@ def test_mixed_modalities_dataset() -> None:
 
     assert report.summary.status == "warn"
     assert {issue.code for issue in report.issues} >= {"plate.mixed_modalities"}
+
+
+def test_filetree_risks_dataset() -> None:
+    """Filetree-risk sample should surface dataset-level warnings."""
+    report = validate_dataset(
+        DATA_ROOT / "filetree_risks" / "dataset",
+        metadata_paths=[DATA_ROOT / "filetree_risks" / "metadata.csv"],
+        config=_without_llm(),
+    )
+
+    assert report.summary.status == "warn"
+    assert {issue.code for issue in report.issues} >= {
+        "dataset.empty_directory",
+        "dataset.similar_directories",
+    }

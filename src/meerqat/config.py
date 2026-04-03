@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
@@ -78,15 +79,15 @@ class LLMConfig:
 
     enabled: bool = True
     provider: str = "instructor"
-    model_alias: str = "qwen2.5-3b-instruct"
+    model_alias: str = "tinyllama"
     repo_id: str | None = None
     filename: str | None = None
     cache_dir: Path | None = None
     offline: bool = False
     auto_start_server: bool = True
-    n_ctx: int = 4096
+    n_ctx: int = 2048
     n_threads: int = 8
-    max_tokens: int = 512
+    max_tokens: int = 256
     temperature: float = 0.2
     base_url: str = "http://127.0.0.1:8000/v1"
 
@@ -104,6 +105,21 @@ class LLMConfig:
     def resolved_n_ctx(self) -> int:
         """Clamp the requested context window to the selected model's limit."""
         return min(self.n_ctx, self.resolved_model().context_window)
+
+    def display_dict(self) -> dict[str, Any]:
+        """Return a compact, notebook-friendly summary of the LLM config."""
+        return {
+            "provider": self.provider,
+            "model": self.model_alias,
+            "base_url": self.base_url,
+            "n_ctx": self.resolved_n_ctx(),
+        }
+
+    def __repr__(self) -> str:
+        """Render a compact string form for notebooks and logs."""
+        return json.dumps(self.display_dict(), indent=2)
+
+    __str__ = __repr__
 
 
 @dataclass(frozen=True)
@@ -152,6 +168,16 @@ class ValidationConfig:
             expected_images_per_plate=expected_images_per_plate,
             require_xml=template.require_xml,
         )
+
+    def display_dict(self) -> dict[str, Any]:
+        """Return a compact, notebook-friendly summary of the config."""
+        return self.llm.display_dict()
+
+    def __repr__(self) -> str:
+        """Render a compact string form for notebooks and logs."""
+        return json.dumps(self.display_dict(), indent=2)
+
+    __str__ = __repr__
 
 
 def _normalize_llm_config(raw: dict[str, Any]) -> LLMConfig:

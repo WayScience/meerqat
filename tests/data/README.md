@@ -11,3 +11,4 @@ Included scenarios:
 - `xml_mismatch`: folder name does not match the XML plate identifier
 - `missing_metadata`: plate exists but metadata is absent
 - `mixed_modalities`: plate contains both TIFF and PNG files
+- `filetree_risks`: empty and similarly named directories trigger dataset warnings

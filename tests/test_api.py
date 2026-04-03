@@ -36,6 +36,16 @@ def test_validate_dataset_passes(valid_dataset: Path, metadata_csv: Path) -> Non
     assert report.issues == ()
 
 
+def test_validate_dataset_discovers_nearby_metadata(
+    valid_dataset: Path, metadata_csv: Path
+) -> None:
+    """Validation should auto-discover metadata when none is provided."""
+    report = validate_dataset(valid_dataset)
+
+    assert report.summary.status == "pass"
+    assert report.summary.metadata_record_count == 1
+
+
 def test_validate_dataset_detects_multiple_issues(
     tmp_path: Path, metadata_csv: Path
 ) -> None:

@@ -50,6 +50,36 @@ def test_cli_validate_writes_json_report(
     assert "Meerqat Report" in result.stdout
 
 
+def test_cli_validate_discovers_metadata_without_flag(
+    valid_dataset: Path, metadata_csv: Path, tmp_path: Path
+) -> None:
+    """The validate command should auto-discover nearby metadata files."""
+    report_path = tmp_path / "cli-report.json"
+    config_path = _write_test_config(tmp_path)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "meerqat.cli",
+            "validate",
+            str(valid_dataset),
+            "--config",
+            str(config_path),
+            "--report-json",
+            str(report_path),
+        ],
+        capture_output=True,
+        env=_cli_env(tmp_path),
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["status"] == "pass"
+    assert payload["summary"]["metadata_record_count"] == 1
+
+
 def test_cli_batch_validate_returns_warning_exit_code(tmp_path: Path) -> None:
     """Batch validation should propagate warning exit codes."""
     dataset = tmp_path / "dataset"

@@ -1,8 +1,12 @@
 # MeerQat 🐾
 
+<p align="center">
+  <img src="docs/src/_static/meerqat.png" alt="MeerQat logo" width="380">
+</p>
+
 **MeerQat** is a Python package and CLI for validating bioimaging datasets before pipeline execution. It scans filesystem structure, parses XML and tabular metadata, checks cross-source consistency, and emits reports for both humans and automation.
 
-> A sentinel for bioimaging data.
+> 👀🐾 A diligent sentinel for bioimaging data, on the lookout for issues before they become barriers.
 
 ## What It Validates
 
@@ -44,7 +48,6 @@ uv sync
 
 ```bash
 meerqat validate /data/CHP-134 \
-  --metadata metadata.csv \
   --config assay.yaml \
   --report-json report.json \
   --report-markdown report.md \
@@ -52,6 +55,8 @@ meerqat validate /data/CHP-134 \
 ```
 
 This command runs deterministic validation and then the built-in LLM review.
+If you do not pass `--metadata`, MeerQat looks for nearby CSV/XLSX metadata files
+next to the dataset or its parent directory.
 
 Batch validation:
 
@@ -82,7 +87,7 @@ Use an OpenAI-compatible local `llama.cpp` server with Instructor:
 ```bash
 meerqat validate /data/CHP-134 \
   --llm-provider instructor \
-  --llm-model qwen2.5-3b-instruct \
+  --llm-model tinyllama \
   --llm-base-url http://127.0.0.1:8000/v1
 ```
 
@@ -96,7 +101,6 @@ from meerqat import ValidationConfig, validate_dataset
 
 report = validate_dataset(
     "/data/CHP-134",
-    metadata_paths=["metadata.csv"],
     config=ValidationConfig(expected_images_per_plate=384),
 )
 
@@ -111,8 +115,7 @@ A small checked-in regression corpus lives under `tests/data`. You can use it
 to exercise known failure modes quickly:
 
 ```bash
-meerqat validate tests/data/xml_mismatch/dataset \
-  --metadata tests/data/xml_mismatch/metadata.csv
+meerqat validate tests/data/xml_mismatch/dataset
 ```
 
 The current scenarios cover:
@@ -136,7 +139,7 @@ fail_on_warning: false
 llm:
   enabled: true
   provider: instructor
-  model_alias: qwen2.5-3b-instruct
+  model_alias: tinyllama
   base_url: http://127.0.0.1:8000/v1
   offline: true
 ```
@@ -153,4 +156,4 @@ The current package covers the roadmap with lightweight implementations:
 
 ## Local Model Choice
 
-The default LLM preset is `qwen2.5-3b-instruct`, which is a lightweight and more capable default than the earlier TinyLlama-based prototype. You can override the model alias, repository, and GGUF filename from either the Python API or the CLI.
+The default LLM preset is `tinyllama`, which keeps local setup light for routine runs and docs examples. You can override the model alias, repository, and GGUF filename from either the Python API or the CLI when you want a stronger local model.

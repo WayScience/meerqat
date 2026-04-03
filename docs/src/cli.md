@@ -18,11 +18,13 @@ the LLM review is enabled and nothing is already listening there.
 
 ```bash
 meerqat validate /data/run_001 \
-  --metadata metadata.csv \
   --report-json report.json \
   --report-markdown report.md \
   --report-html report.html
 ```
+
+If you omit `--metadata`, MeerQat looks for nearby CSV/XLSX metadata files next
+to the dataset or in its parent directory.
 
 ## Batch Validation
 

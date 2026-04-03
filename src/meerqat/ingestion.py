@@ -13,6 +13,7 @@ from meerqat.config import IMAGE_EXTENSIONS, ValidationConfig
 from meerqat.models import Dataset, FiletreeSummary, MetadataRecord, Plate
 
 SIMILAR_DIRECTORY_THRESHOLD = 0.88
+METADATA_EXTENSIONS = (".csv", ".xlsx", ".xls")
 
 
 def _looks_like_plate(path: Path) -> bool:
@@ -166,6 +167,29 @@ def load_metadata_records(
     return tuple(records)
 
 
+def _discover_metadata_paths(dataset_root: Path) -> tuple[Path, ...]:
+    """Look for likely metadata files near the dataset root."""
+    search_roots = (dataset_root, dataset_root.parent)
+    candidates: list[Path] = []
+    for search_root in search_roots:
+        if not search_root.exists():
+            continue
+        for extension in METADATA_EXTENSIONS:
+            candidates.extend(
+                path
+                for path in search_root.glob(f"*{extension}")
+                if path.is_file()
+            )
+    unique_candidates = sorted(set(candidates))
+    preferred = [
+        path
+        for path in unique_candidates
+        if path.stem.lower() in {"metadata", "meta", "plate_metadata"}
+    ]
+    remainder = [path for path in unique_candidates if path not in preferred]
+    return tuple(preferred + remainder)
+
+
 def ingest_dataset(
     dataset_path: str | Path,
     *,
@@ -192,7 +216,12 @@ def ingest_dataset(
                 image_modalities=_image_modalities(image_files),
             )
         )
-    metadata_records = load_metadata_records(metadata_paths or [], active_config)
+    resolved_metadata_paths = (
+        [Path(path) for path in metadata_paths]
+        if metadata_paths
+        else list(_discover_metadata_paths(root))
+    )
+    metadata_records = load_metadata_records(resolved_metadata_paths, active_config)
     dataset_id = active_config.dataset_id or root.name
     return Dataset(
         dataset_id=dataset_id,

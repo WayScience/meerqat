@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import warnings
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
@@ -33,6 +34,8 @@ SERVER_RUNTIME_MODULES = (
     "starlette_context",
     "pydantic_settings",
 )
+HF_HUB_DISABLE_PROGRESS_ENV = "HF_HUB_DISABLE_PROGRESS_BARS"
+TQDM_IPROGRESS_WARNING = "IProgress not found"
 
 
 class AdvisoryHintModel(BaseModel):
@@ -371,7 +374,18 @@ def get_cached_model_path(
     offline: bool = False,
 ) -> str:
     """Download or resolve a GGUF model path."""
-    hf_hub_download = importlib.import_module("huggingface_hub").hf_hub_download
+    os.environ.setdefault(HF_HUB_DISABLE_PROGRESS_ENV, "1")
+    tqdm_std = importlib.import_module("tqdm.std")
+    warnings.filterwarnings(
+        "ignore",
+        message=f".*{TQDM_IPROGRESS_WARNING}.*",
+        category=tqdm_std.TqdmWarning,
+    )
+    huggingface_hub = importlib.import_module("huggingface_hub")
+    utils = getattr(huggingface_hub, "utils", None)
+    if utils is not None and hasattr(utils, "disable_progress_bars"):
+        utils.disable_progress_bars()
+    hf_hub_download = huggingface_hub.hf_hub_download
     kwargs: dict[str, Any] = {}
     if cache_dir is not None:
         kwargs["cache_dir"] = str(cache_dir)
