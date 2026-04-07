@@ -1,8 +1,6 @@
 # MeerQat 🐾
 
-<p align="center">
-  <img src="docs/src/_static/meerqat.png" alt="MeerQat logo" width="380">
-</p>
+<img src="docs/src/_static/meerqat.png" alt="MeerQat logo" width="380">
 
 **MeerQat** is a Python package and CLI for validating bioimaging datasets before pipeline execution. It scans filesystem structure, parses XML and tabular metadata, checks cross-source consistency, and emits reports for both humans and automation.
 
