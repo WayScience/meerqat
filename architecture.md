@@ -9,8 +9,9 @@ MeerQat combines:
 
 The boundary matters:
 
-- Deterministic validation owns issue detection, severity assignment, report status, and exit codes.
-- The LLM layer consumes the completed deterministic report and adds interpretation only.
+- Deterministic validation owns issue detection and severity assignment.
+- The LLM layer consumes the completed deterministic report and adds interpretation.
+- The LLM stage is required; if it cannot complete, MeerQat emits `llm.review_unavailable` and reports failure.
 
 ## Core Components
 
@@ -39,4 +40,4 @@ The boundary matters:
 
 ## Principle
 
-**Validation is deterministic. Interpretation is advisory.**
+**Rule logic is deterministic. LLM interpretation is required and must complete.**

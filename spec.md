@@ -96,9 +96,9 @@ MeerQat consists of two validation layers:
 
 - Rule-based checks
 - Fully reproducible
-- Required for pass/fail decisions
+- Required for deterministic issue codes and severity decisions
 
-### 2. LLM-Assisted Pattern Inference (Advisory)
+### 2. LLM-Assisted Pattern Inference (Required Runtime Stage)
 
 - Prefers Instructor with a local OpenAI-compatible `llama.cpp` server
 - Falls back to the `langchain` provider when `instructor` is unavailable
@@ -108,10 +108,13 @@ MeerQat consists of two validation layers:
   - anomaly explanations
   - config suggestions
 
-This layer does not make pass/fail decisions. It operates on the completed
-deterministic report and adds interpretation for human operators.
+This layer does not assign deterministic rule codes or severities. It operates
+on the completed deterministic report and adds interpretation for human
+operators. If this required runtime stage fails, MeerQat emits
+`llm.review_unavailable` and the run fails.
 
-**Principle:** Validation is deterministic. Interpretation is advisory.
+**Principle:** Rule logic is deterministic. LLM interpretation is required and
+must complete successfully.
 
 ______________________________________________________________________
 

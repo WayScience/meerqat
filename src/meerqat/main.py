@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import importlib.metadata
 import platform
+from collections import Counter
+from dataclasses import replace
 from pathlib import Path
 
 from meerqat.config import LLMConfig, ValidationConfig, load_config
@@ -14,6 +16,7 @@ from meerqat.models import (
     LLMReview,
     ReadyReport,
     ReportProvenance,
+    ValidationIssue,
     ValidationReport,
 )
 from meerqat.reporting import (
@@ -45,6 +48,37 @@ def _build_provenance(llm_review: LLMReview) -> ReportProvenance:
     )
 
 
+def _with_llm_gate_issue(
+    report: ValidationReport,
+    llm_review: LLMReview,
+    *,
+    llm_enabled: bool,
+) -> ValidationReport:
+    """Fail validation when the required LLM review does not complete."""
+    if not llm_enabled or llm_review.status == "completed":
+        return report
+    llm_issue = ValidationIssue(
+        code="llm.review_unavailable",
+        severity="error",
+        message=(
+            f"Required LLM review did not complete. Status='{llm_review.status}'."
+        ),
+        remediation=(
+            "Run `meerqat ready` and fix local runtime issues before using "
+            "validation results."
+        ),
+    )
+    issues = (*report.issues, llm_issue)
+    issue_counts = Counter(issue.severity for issue in issues)
+    summary = replace(
+        report.summary,
+        status="fail",
+        issue_counts=dict(issue_counts),
+        ready_for_pipeline=False,
+    )
+    return replace(report, summary=summary, issues=issues)
+
+
 def validate_dataset(
     dataset_path: str | Path,
     *,
@@ -70,15 +104,19 @@ def validate_dataset(
         model=llm_review.model,
         error=llm_review.error,
     )
-    return ValidationReport(
-        summary=report.summary,
-        issues=report.issues,
-        dataset=report.dataset,
-        rule_results=report.rule_results,
-        llm_hints=llm_review.hints,
-        llm_findings=llm_review.findings,
-        llm_review=llm_review_obj,
-        provenance=_build_provenance(llm_review_obj),
+    return _with_llm_gate_issue(
+        ValidationReport(
+            summary=report.summary,
+            issues=report.issues,
+            dataset=report.dataset,
+            rule_results=report.rule_results,
+            llm_hints=llm_review.hints,
+            llm_findings=llm_review.findings,
+            llm_review=llm_review_obj,
+            provenance=_build_provenance(llm_review_obj),
+        ),
+        llm_review_obj,
+        llm_enabled=active_config.llm.enabled,
     )
 
 

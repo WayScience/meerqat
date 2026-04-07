@@ -3,11 +3,14 @@
 ## Deterministic First
 
 Every CLI command runs deterministic validation first. That deterministic pass
-produces the real issues, report status, and exit code.
+produces the deterministic issue set.
 
 MeerQat runs the LLM review after the deterministic report already exists.
 MeerQat prefers the Instructor path and falls back to LangChain when Instructor
 is unavailable.
+
+The LLM review is required in normal operation. If it cannot complete, MeerQat
+adds `llm.review_unavailable` and returns a failure status.
 
 The default LLM base URL is local: `http://127.0.0.1:8000/v1`. `--offline`
 is off by default and only applies when you pass it or set it in config.

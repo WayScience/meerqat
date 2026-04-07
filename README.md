@@ -17,16 +17,19 @@
 - Partial image sets and zero-byte image files
 - Mixed image modalities within a single plate
 
-Validation is deterministic. The LLM review is built in and adds interpretive output without owning pass/fail.
+Validation is deterministic. The built-in LLM review is also required for a
+successful run. If the LLM review cannot complete, MeerQat marks the run as a
+failure with `llm.review_unavailable`.
 
 ## Deterministic Vs LLM Review
 
 MeerQat has two separate layers:
 
-- Deterministic validation scans the dataset, parses XML and metadata, applies rules, and produces the real pass, warn, or fail outcome.
+- Deterministic validation scans the dataset, parses XML and metadata, and applies the rule set.
 - The built-in LLM review runs after that deterministic report exists and adds hints plus suspected hidden issues such as likely root causes, naming-pattern observations, config suggestions, and filetree/content anomalies.
-
-The LLM does not decide issue codes, severity, or exit codes.
+- The final report remains deterministic for issue coding and severity semantics.
+  If the required LLM review fails operationally, MeerQat adds an explicit
+  `llm.review_unavailable` error and returns failure.
 
 ## Features
 
@@ -117,8 +120,7 @@ report = validate_dataset(
 print(report.summary.status)
 ```
 
-The report includes `llm_hints`, `llm_findings`, and `llm_review`, but
-`report.summary.status` still comes from deterministic rules. JSON reports
+The report includes `llm_hints`, `llm_findings`, and `llm_review`. JSON reports
 also include a `schema_version` plus `provenance` block with generation time,
 package version, runtime platform, and LLM review metadata.
 

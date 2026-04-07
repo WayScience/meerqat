@@ -562,3 +562,27 @@ def test_validate_dataset_adds_llm_hints(
     assert report.llm_hints[0].detail == "pass"
     assert report.llm_findings[0].category == "filetree"
     assert report.llm_review.status == "completed"
+
+
+def test_validate_dataset_fails_when_llm_review_unavailable(
+    monkeypatch: pytest.MonkeyPatch, valid_dataset: Path, metadata_csv: Path
+) -> None:
+    """Validation should fail when the required LLM review does not complete."""
+    monkeypatch.setattr(
+        "meerqat.main.generate_llm_review",
+        lambda report, config: types.SimpleNamespace(
+            hints=(),
+            findings=(),
+            provider="instructor",
+            model="tinyllama",
+            status="failed",
+            error="runtime unavailable",
+        ),
+    )
+
+    report = validate_dataset(valid_dataset, metadata_paths=[metadata_csv])
+
+    assert report.summary.status == "fail"
+    assert report.summary.ready_for_pipeline is False
+    assert "error" in report.summary.issue_counts
+    assert any(issue.code == "llm.review_unavailable" for issue in report.issues)
