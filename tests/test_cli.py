@@ -11,7 +11,15 @@ from pathlib import Path
 import pytest
 
 from meerqat.cli import main
-from meerqat.models import ReadyCheck, ReadyReport
+from meerqat.models import (
+    BatchValidationReport,
+    ReadyCheck,
+    ReadyReport,
+    ValidationReport,
+    ValidationSummary,
+)
+
+SYSTEM_ERROR_EXIT = 3
 
 
 def _cli_env(tmp_path: Path) -> dict[str, str]:
@@ -153,6 +161,47 @@ def test_cli_ready_renders_json(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "pass"
     assert payload["checks"][0]["name"] == "probe"
+
+
+def test_cli_batch_validate_unknown_status_returns_system_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Unknown batch status values should map to system-error exit code."""
+    config_path = _write_test_config(tmp_path)
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+
+    monkeypatch.setattr(
+        "meerqat.cli.batch_validate",
+        lambda datasets, metadata_paths, config: BatchValidationReport(
+            reports=(
+                ValidationReport(
+                    summary=ValidationSummary(
+                        status="mystery",
+                        dataset_id="dataset",
+                        plate_count=0,
+                        metadata_record_count=0,
+                        image_count=0,
+                        issue_counts={},
+                        ready_for_pipeline=False,
+                    ),
+                    issues=(),
+                ),
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        "meerqat.cli.write_reports",
+        lambda report, json_path=None, markdown_path=None, html_path=None: None,
+    )
+
+    exit_code = main(["batch-validate", str(dataset), "--config", str(config_path)])
+
+    assert exit_code == SYSTEM_ERROR_EXIT
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["reports"][0]["summary"]["status"] == "mystery"
 
 
 def _write_test_config(tmp_path: Path) -> Path:

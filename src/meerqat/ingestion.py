@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections import Counter, defaultdict
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -16,6 +17,7 @@ from meerqat.models import Dataset, FiletreeSummary, MetadataRecord, Plate
 SIMILAR_DIRECTORY_THRESHOLD = 0.88
 METADATA_EXTENSIONS = (".csv", ".xlsx", ".xls")
 COMPOUND_IMAGE_EXTENSIONS = (".ome.zarr", ".ome.tif", ".ome.tiff")
+LOGGER = logging.getLogger(__name__)
 
 
 def _supported_image_extension(path: Path) -> str | None:
@@ -81,14 +83,18 @@ def _extract_xml_plate_id(xml_path: Path | None) -> str | None:
     except (ET.ParseError, DefusedXmlException, OSError):
         return None
     candidates: list[str] = []
+    root_attrib = {key.lower(): value for key, value in root.attrib.items()}
     for key in ("PlateID", "PlateName", "Name", "ID", "id", "name"):
-        value = root.attrib.get(key)
+        value = root_attrib.get(key.lower())
         if value:
             candidates.append(value)
     for element in root.iter():
         if element.tag.lower().endswith("plate") or "plate" in element.tag.lower():
+            element_attrib = {
+                key.lower(): value for key, value in element.attrib.items()
+            }
             for key in ("id", "name", "plateid", "platename"):
-                value = element.attrib.get(key)
+                value = element_attrib.get(key)
                 if value:
                     candidates.append(value)
             text = (element.text or "").strip()
@@ -139,7 +145,7 @@ def _build_filetree_summary(dataset_root: Path) -> FiletreeSummary:
             relative = resolved.relative_to(dataset_root)
             bucket_key = (len(relative.parts), resolved.name.lower()[:4])
             similarity_buckets[bucket_key].append(resolved)
-        elif path.is_file() or path.is_dir():
+        elif path.is_file():
             extension = _inventory_extension(path)
             if extension is not None:
                 file_extensions[extension] += 1
@@ -172,10 +178,14 @@ def load_metadata_records(
     records: list[MetadataRecord] = []
     for raw_path in metadata_paths:
         path = Path(raw_path)
-        if path.suffix.lower() == ".csv":
-            frame = pd.read_csv(path)
-        else:
-            frame = pd.read_excel(path)
+        try:
+            if path.suffix.lower() == ".csv":
+                frame = pd.read_csv(path)
+            else:
+                frame = pd.read_excel(path)
+        except Exception:
+            LOGGER.exception("Failed to load metadata file '%s'; skipping.", path)
+            continue
         frame.columns = [str(column).strip() for column in frame.columns]
         if config.metadata_plate_column not in frame.columns:
             continue

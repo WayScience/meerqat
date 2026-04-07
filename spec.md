@@ -72,7 +72,8 @@ A logical unit containing:
 
 ### Metadata Record
 
-A row from an external metadata file (CSV/XLSX). The analysts would prefer to already be in CSV format over XLSX. LLM should convert if possible.
+A row from an external metadata file (CSV/XLSX) representing plate-level
+annotations.
 
 ### Validation Rule
 
@@ -229,10 +230,10 @@ ______________________________________________________________________
 
 ```python
 class Dataset:
-    dataset_id: str | None
+    dataset_id: str
     root: Path
-    plates: list[Plate]
-    metadata_records: list[MetadataRecord]
+    plates: tuple[Plate, ...] = ()
+    metadata_records: tuple[MetadataRecord, ...] = ()
     filetree_summary: FiletreeSummary
 ```
 
@@ -244,9 +245,9 @@ class Plate:
     path: Path
     xml_path: Path | None
     xml_plate_id: str | None
-    image_files: list[Path]
-    zero_byte_images: list[Path]
-    image_modalities: list[str]
+    image_files: tuple[Path, ...] = ()
+    zero_byte_images: tuple[Path, ...] = ()
+    image_modalities: tuple[str, ...] = ()
 ```
 
 ### ValidationIssue
@@ -256,9 +257,9 @@ class ValidationIssue:
     code: str
     severity: str
     message: str
-    plate_id: str | None
-    path: str | None
-    remediation: str | None
+    plate_id: str | None = None
+    path: str | None = None
+    remediation: str | None = None
 ```
 
 ______________________________________________________________________
@@ -279,7 +280,7 @@ metadata_plate_column: PlateID
 
 ______________________________________________________________________
 
-## CLI Interface
+## CLI
 
 ### Validate dataset
 
@@ -358,7 +359,7 @@ ______________________________________________________________________
 - Image-level QC
 - Visualization dashboards
 - CI integration
-- Batch validation workflows
+- Large-scale batch orchestration and scheduling improvements
 
 ______________________________________________________________________
 

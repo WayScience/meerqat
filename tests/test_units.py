@@ -14,7 +14,7 @@ import pytest
 from meerqat import ready, validate_dataset
 from meerqat.cli import build_parser, main
 from meerqat.config import DEFAULT_MODEL_SPECS, LLMConfig, ValidationConfig, load_config
-from meerqat.ingestion import ingest_dataset
+from meerqat.ingestion import ingest_dataset, load_metadata_records
 from meerqat.llm import (
     HF_HUB_DISABLE_PROGRESS_ENV,
     TQDM_IPROGRESS_WARNING,
@@ -146,6 +146,42 @@ def test_ingest_dataset_tracks_empty_and_similar_directories(tmp_path: Path) -> 
         left.endswith("segment_A") and right.endswith("segment_B")
         for left, right in dataset.filetree_summary.similarly_named_directories
     )
+
+
+def test_ingest_dataset_extracts_case_insensitive_nested_plate_attributes(
+    tmp_path: Path,
+) -> None:
+    """Nested XML plate attributes should be read regardless of key casing."""
+    dataset_root = tmp_path / "dataset"
+    plate = dataset_root / "Plate_A01"
+    plate.mkdir(parents=True)
+    (plate / "Index.xml").write_text(
+        '<Root><Plate Name="Plate_A01" /></Root>',
+        encoding="utf-8",
+    )
+    (plate / "image_001.tiff").write_bytes(b"pixels")
+
+    dataset = ingest_dataset(dataset_root)
+
+    assert dataset.plates[0].xml_plate_id == "Plate_A01"
+
+
+def test_load_metadata_records_skips_unreadable_file(
+    tmp_path: Path,
+) -> None:
+    """Unreadable metadata files should be skipped without aborting ingestion."""
+    bad_file = tmp_path / "broken.xlsx"
+    bad_file.write_text("not an xlsx file", encoding="utf-8")
+    good_file = tmp_path / "metadata.csv"
+    good_file.write_text("plate_id,compound\nPlate_A01,DMSO\n", encoding="utf-8")
+
+    records = load_metadata_records(
+        [bad_file, good_file],
+        ValidationConfig(llm=LLMConfig(enabled=False)),
+    )
+
+    assert len(records) == 1
+    assert records[0].plate_id == "Plate_A01"
 
 
 def test_reporting_helpers_cover_batch_and_hints(

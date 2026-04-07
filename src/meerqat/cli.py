@@ -102,7 +102,9 @@ def _batch_validate_command(args: argparse.Namespace) -> int:
         return 2
     if "warn" in statuses:
         return 1
-    return 0
+    if statuses and all(status == "pass" for status in statuses):
+        return 0
+    return 3
 
 
 def _models_command() -> int:

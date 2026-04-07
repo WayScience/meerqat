@@ -68,13 +68,13 @@ report = validate_dataset(
     data_root / "dataset",
 )
 
-report.summary.status
+print(report.summary.status)
 # -
 
 # The expected result is `"pass"`.
 #
 
-report.summary.to_dict()
+print(report.summary.to_dict())
 
 # ## Inspect a Broken Dataset
 #
@@ -88,7 +88,7 @@ broken_report = validate_dataset(
     broken_root / "dataset",
 )
 
-broken_report.summary.status
+print(broken_report.summary.status)
 # -
 
 # The expected result is `"fail"`. That fail status comes from deterministic
@@ -133,7 +133,8 @@ filetree_report = validate_dataset(filetree_root / "dataset")
 #
 
 validation_config = ValidationConfig()
-validation_config
+report = validate_dataset(data_root / "dataset", config=validation_config)
+print(report.summary.to_dict())
 
 # ## Use the CLI from a Notebook
 #
@@ -177,3 +178,4 @@ with TemporaryDirectory() as tmpdir:
     generated_files = sorted(path.name for path in output_dir.iterdir())
 
 generated_files
+print(generated_files)
