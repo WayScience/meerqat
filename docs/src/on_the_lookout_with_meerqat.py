@@ -111,7 +111,7 @@ print(broken_report.summary.status)
 filetree_root = repo_root / "tests" / "data" / "filetree_risks"
 filetree_report = validate_dataset(filetree_root / "dataset")
 
-{
+summary_dict = {
     "status": filetree_report.summary.status,
     "filetree_summary": filetree_report.dataset.filetree_summary.to_dict(),
     "filetree_issues": [
@@ -120,6 +120,7 @@ filetree_report = validate_dataset(filetree_root / "dataset")
         if issue.code.startswith("dataset.")
     ],
 }
+print(summary_dict)
 # -
 
 # The deterministic issues above come from the filetree scan, and the LLM can
@@ -177,5 +178,4 @@ with TemporaryDirectory() as tmpdir:
     )
     generated_files = sorted(path.name for path in output_dir.iterdir())
 
-generated_files
 print(generated_files)

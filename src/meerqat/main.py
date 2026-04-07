@@ -48,6 +48,18 @@ def _build_provenance(llm_review: LLMReview) -> ReportProvenance:
     )
 
 
+def _to_llm_review(review: object) -> LLMReview:
+    """Normalize a review object to the report metadata dataclass."""
+    if isinstance(review, LLMReview):
+        return review
+    return LLMReview(
+        status=getattr(review, "status", "not_run"),
+        provider=getattr(review, "provider", None),
+        model=getattr(review, "model", None),
+        error=getattr(review, "error", None),
+    )
+
+
 def _with_llm_gate_issue(
     report: ValidationReport,
     llm_review: LLMReview,
@@ -98,12 +110,7 @@ def validate_dataset(
     )
     report = validate_dataset_model(dataset, active_config)
     llm_review = generate_llm_review(report, active_config.llm)
-    llm_review_obj = LLMReview(
-        status=llm_review.status,
-        provider=llm_review.provider,
-        model=llm_review.model,
-        error=llm_review.error,
-    )
+    llm_review_obj = _to_llm_review(llm_review)
     return _with_llm_gate_issue(
         ValidationReport(
             summary=report.summary,
@@ -154,7 +161,9 @@ def ready(
 ) -> ReadyReport:
     """Run a local-runtime readiness probe for MeerQat."""
     active_config = config or load_config(config_path)
-    active_llm = llm_config or active_config.llm
+    if llm_config is not None:
+        active_config = active_config.with_cli_overrides(llm=llm_config)
+    active_llm = active_config.llm
     return run_ready_checks(active_llm)
 
 

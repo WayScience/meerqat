@@ -5,7 +5,7 @@
 MeerQat combines:
 
 1. Deterministic validation (source of truth)
-1. LLM-assisted pattern inference (built in)
+1. LLM-assisted pattern inference (built-in)
 
 The boundary matters:
 

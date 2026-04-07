@@ -148,6 +148,25 @@ def test_ingest_dataset_tracks_empty_and_similar_directories(tmp_path: Path) -> 
     )
 
 
+def test_ingest_dataset_caps_large_similarity_buckets(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Large directory buckets should be capped before pairwise comparisons."""
+    dataset_root = tmp_path / "dataset"
+    plate = dataset_root / "Plate_A01"
+    plate.mkdir(parents=True)
+    (plate / "Index.xml").write_text('<Plate PlateID="Plate_A01"></Plate>')
+    (plate / "image_001.tiff").write_bytes(b"pixels")
+    for name in ("segment_A", "segment_B", "segment_C"):
+        (dataset_root / name).mkdir()
+
+    monkeypatch.setattr("meerqat.ingestion.MAX_BUCKET_COMPARE", 1)
+    dataset = ingest_dataset(dataset_root)
+
+    assert dataset.filetree_summary.similarly_named_directories == ()
+
+
 def test_ingest_dataset_extracts_case_insensitive_nested_plate_attributes(
     tmp_path: Path,
 ) -> None:
@@ -557,6 +576,30 @@ def test_ready_api_uses_runtime_probe(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert report.status == "pass"
     assert report.checks[0].name == "probe"
+
+
+def test_ready_api_applies_llm_overrides(monkeypatch: pytest.MonkeyPatch) -> None:
+    """ready() should apply provided LLM overrides before runtime checks."""
+    seen: dict[str, str] = {}
+
+    def fake_probe(llm_config: LLMConfig) -> ReadyReport:
+        seen["provider"] = llm_config.provider
+        return ReadyReport(
+            status="pass",
+            provider=llm_config.provider,
+            model=llm_config.model_alias,
+            checks=(ReadyCheck(name="probe", status="pass", detail="ok"),),
+        )
+
+    monkeypatch.setattr("meerqat.main.run_ready_checks", fake_probe)
+
+    report = ready(
+        config=ValidationConfig(),
+        llm_config=LLMConfig(provider="langchain"),
+    )
+
+    assert report.status == "pass"
+    assert seen["provider"] == "langchain"
 
 
 def test_cli_main_returns_system_error_on_exception(

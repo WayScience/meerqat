@@ -15,6 +15,7 @@ from meerqat.config import IMAGE_EXTENSIONS, ValidationConfig
 from meerqat.models import Dataset, FiletreeSummary, MetadataRecord, Plate
 
 SIMILAR_DIRECTORY_THRESHOLD = 0.88
+MAX_BUCKET_COMPARE = 200
 METADATA_EXTENSIONS = (".csv", ".xlsx", ".xls")
 COMPOUND_IMAGE_EXTENSIONS = (".ome.zarr", ".ome.tif", ".ome.tiff")
 LOGGER = logging.getLogger(__name__)
@@ -156,6 +157,8 @@ def _build_filetree_summary(dataset_root: Path) -> FiletreeSummary:
     similar_pairs: list[tuple[str, str]] = []
     for bucket in similarity_buckets.values():
         sorted_bucket = sorted(bucket)
+        if len(sorted_bucket) > MAX_BUCKET_COMPARE:
+            sorted_bucket = sorted_bucket[:MAX_BUCKET_COMPARE]
         for index, left in enumerate(sorted_bucket):
             left_text = str(left.relative_to(dataset_root))
             for right in sorted_bucket[index + 1 :]:
