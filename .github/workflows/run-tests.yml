@@ -58,7 +58,7 @@ jobs:
       - name: Install the latest version of uv
         uses: astral-sh/setup-uv@v6
       - name: Cache Hugging Face models
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/huggingface
           key: ${{ runner.os }}-meerqat-hf-${{ hashFiles('pyproject.toml', 'src/meerqat/config.py') }}
