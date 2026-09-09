@@ -1,0 +1,19 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+---
+cff-version: 1.2.0
+title: meerqat
+message: >-
+  If you use this software, please cite it using the
+  metadata from the CITATION.cff file.
+type: software
+authors:
+  - given-names: Dave
+    family-names: Bunten
+    orcid: "https://orcid.org/0000-0001-6041-3665"
+repository-code: "https://github.com/WayScience/meerqat"
+abstract: >-
+  Validate bioimaging datasets by detecting missing files, metadata gaps, and structural inconsistencies early.
+keywords:
+  - python
+license: BSD-3-Clause
